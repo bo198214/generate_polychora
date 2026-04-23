@@ -1,0 +1,28 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "generate_polychora", "generate_polychora.csproj", "{FD188CC3-2077-4600-839C-137FB90C5B22}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{B79D63AB-13C8-4895-BB6F-891E5943B1AD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FD188CC3-2077-4600-839C-137FB90C5B22}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FD188CC3-2077-4600-839C-137FB90C5B22}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FD188CC3-2077-4600-839C-137FB90C5B22}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FD188CC3-2077-4600-839C-137FB90C5B22}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B79D63AB-13C8-4895-BB6F-891E5943B1AD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B79D63AB-13C8-4895-BB6F-891E5943B1AD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B79D63AB-13C8-4895-BB6F-891E5943B1AD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B79D63AB-13C8-4895-BB6F-891E5943B1AD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
