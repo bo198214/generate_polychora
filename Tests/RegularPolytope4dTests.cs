@@ -17,8 +17,8 @@ public class RegularPolytope4dTests
         ("8-cell",  16,   32,  24,   8),
         ("16-cell",  8,   24,  32,  16),
         ("24-cell", 24,   96,  96,  24),
-        // ("600-cell", 120, 720, 1200, 600), // slow — enable for full verification
-        // ("120-cell", 600, 1200, 720, 120),
+        ("120-cell", 600, 1200, 720, 120),
+        ("600-cell", 120, 720, 1200, 600), // slow — enable for full verification
     };
 
     static List<double[]> LoadJson(string name)
