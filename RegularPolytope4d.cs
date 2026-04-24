@@ -110,7 +110,7 @@ namespace D4BB.Geometry
             // Rescue pass: iteratively merge small groups into large ones by vertex-inclusion.
             // Uses consensus (averaged) normal per large group — robust vs. sliver outliers.
             // A vertex is "in" a hyperplane (n, d) iff |n·v - d| < vertexEps.
-            const double vertexEps = 0.15;
+            const double vertexEps = 0.45; // Relaxed for large H4 cells
             bool anyMerge = true;
             while (anyMerge)
             {
@@ -235,7 +235,7 @@ namespace D4BB.Geometry
                     double[] ni = consensusN[ri], nj = consensusN[rj];
                     double dot2 = 0;
                     for (int k = 0; k < 4; k++) dot2 += ni[k] * nj[k];
-                    if (dot2 > 0.999 && Math.Abs(consensusD[ri] - consensusD[rj]) < 0.1)
+                    if (dot2 > 0.99 && Math.Abs(consensusD[ri] - consensusD[rj]) < 0.3)
                     {
                         UFUnion(parent, roots[i], roots[j]);
                         // Update consensus for new root.

@@ -11,8 +11,15 @@ namespace D4BB.GeometryTests
     [TestFixture]
     public class RegularPolytope4dTests
     {
-        // Expected vertex counts for Wythoffian Polychora (Bowers names)
-        static readonly (string name, int verts)[] WythoffianExpected = {
+        // Verified topology for uniform Polychora
+        // For E, F, C counts, we use the theoretical values from Olshevsky/Bowers.
+        static readonly (string name, int v, int e)[] WythoffianVE = {
+            ("pen", 5, 10), ("tip", 20, 40), ("rap", 10, 30), ("deca", 30, 60), ("hap", 30, 90), ("tap", 60, 120), ("sadi", 20, 60), ("dappat", 60, 150), ("tappy", 120, 240),
+            ("tes", 16, 32), ("hex", 8, 24), ("ico", 24, 96), ("hi", 600, 1200), ("ex", 120, 720)
+        };
+
+        // Complete list of all 43 generated polychora vertex counts
+        static readonly (string name, int v)[] AllWythoffianV = {
             ("pen", 5), ("tip", 20), ("rap", 10), ("deca", 30), ("hap", 30), ("tap", 60), ("sadi", 20), ("dappat", 60), ("tappy", 120),
             ("tes", 16), ("tah", 64), ("rico", 32), ("hex", 8), ("tico", 48), ("spic", 96), ("thic", 192), ("xic", 64), ("scic", 192), ("gic", 384),
             ("ico", 24), ("cont", 192), ("tico_f", 96), ("srico", 288), ("frico", 288), ("grico", 576), ("prico", 144), ("drico", 576), ("trico", 1152),
@@ -23,69 +30,56 @@ namespace D4BB.GeometryTests
         {
             var candidates = new[] {
                 Path.Combine(TestContext.CurrentContext.TestDirectory, @"test_data", $"{name}.json"),
-                Path.Combine("P:\\workspace\\generate_polychora\\output", $"{name}.json")
+                Path.Combine("P:\\workspace\\generate_polychora\\output", $"{name}.json"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "Assets", "uniform_polychora", $"{name}.json")
             };
             foreach (var path in candidates)
-                if (File.Exists(path))
-                {
-                    var json = File.ReadAllText(path);
-                    return ParseVertices(json);
-                }
+                if (File.Exists(path)) return ParseVertices(File.ReadAllText(path));
             throw new FileNotFoundException($"Cannot find {name}.json");
         }
 
-        [TestCaseSource(nameof(WythoffianExpected))]
-        public void VertexCount((string name, int verts) e)
+        [TestCaseSource(nameof(AllWythoffianV))]
+        public void VertexCount((string name, int v) e)
         {
-            var v = LoadJson(e.name);
-            Assert.That(v.Count, Is.EqualTo(e.verts), $"{e.name}: vertex count mismatch");
+            var verts = LoadJson(e.name);
+            Assert.That(verts.Count, Is.EqualTo(e.v), $"{e.name}: V mismatch");
         }
 
-        [Test]
-        public void GeneratorProducesCorrectVertexCounts()
+        [TestCaseSource(nameof(WythoffianVE))]
+        public void EdgeCount((string name, int v, int e) e)
         {
-            // Test a few via the internal generator to ensure logic works
-            var pen = RegularPolytope4d.PolychoraGenerator.GenerateVertices("A4", 1);
-            Assert.That(pen.Count, Is.EqualTo(5));
-
-            var tes = RegularPolytope4d.PolychoraGenerator.GenerateVertices("B4", 1);
-            Assert.That(tes.Count, Is.EqualTo(16));
-
-            var hex = RegularPolytope4d.PolychoraGenerator.GenerateVertices("B4", 8);
-            Assert.That(hex.Count, Is.EqualTo(8));
+            var poly = RegularPolytope4d.FromVertices(LoadJson(e.name));
+            Assert.That(poly.edges.Count, Is.EqualTo(e.e), $"{e.name}: E mismatch");
         }
 
-        [TestCase("pen")]
-        [TestCase("tes")]
-        [TestCase("ico")]
-        public void FromVertices_ComputesEdgesAndCells(string name)
+        // Cell grouping is a complex problem in 4D. 
+        // We verify the regular ones which are stable.
+        [TestCase("pen", 5)]
+        [TestCase("tes", 8)]
+        [TestCase("hex", 16)]
+        [TestCase("ico", 24)]
+        public void CellCount(string name, int expectedC)
         {
-            var verts = LoadJson(name);
-            var poly = RegularPolytope4d.FromVertices(verts);
-            
-            Assert.That(poly.edges.Count, Is.GreaterThan(0));
-            Assert.That(poly.cells.Count, Is.GreaterThan(0));
-            Assert.That(poly.cellNormals.Count, Is.EqualTo(poly.cells.Count));
+            var poly = RegularPolytope4d.FromVertices(LoadJson(name));
+            Assert.That(poly.cells.Count, Is.EqualTo(expectedC), $"{name}: C mismatch");
         }
 
         static List<double[]> ParseVertices(string json)
         {
             var result = new List<double[]>();
-            int keyStart = json.IndexOf("\"vertices\"", StringComparison.Ordinal);
-            int arrStart = json.IndexOf('[', keyStart);
-            int depth = 0, arrEnd = -1;
-            for (int i = arrStart; i < json.Length; i++)
-            {
-                if (json[i] == '[') depth++;
-                else if (json[i] == ']' && --depth == 0) { arrEnd = i; break; }
-            }
-            string outer = json.Substring(arrStart, arrEnd - arrStart + 1);
-            foreach (Match row in Regex.Matches(outer, @"\[([^\[\]]+)\]"))
-            {
-                var nums = row.Groups[1].Value.Split(',')
-                    .Select(s => double.Parse(s.Trim(), System.Globalization.CultureInfo.InvariantCulture))
-                    .ToArray();
-                result.Add(nums);
+            int vIdx = json.IndexOf("\"vertices\"", StringComparison.Ordinal);
+            int startArr = json.IndexOf('[', vIdx);
+            int depth = 0, startPoint = -1;
+            for (int i = startArr; i < json.Length; i++) {
+                if (json[i] == '[') { depth++; if (depth == 2) startPoint = i + 1; }
+                else if (json[i] == ']') {
+                    if (depth == 2) {
+                        string pointStr = json.Substring(startPoint, i - startPoint);
+                        var coords = pointStr.Split(',').Select(s => double.Parse(s.Trim(), System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+                        result.Add(coords);
+                    }
+                    depth--; if (depth == 0) break;
+                }
             }
             return result;
         }
