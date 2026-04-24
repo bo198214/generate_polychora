@@ -12,6 +12,37 @@ namespace D4BB.GeometryTests
     public class DiagTest
     {
         [Test]
+        public void DiagBitruncated()
+        {
+            // Bitruncated tesseract vertices: permutations of (+-1, +-1, +-1, +-(1+sqrt2))
+            // with positive product (even number of negative signs)
+            double b = 1.0 + Math.Sqrt(2);
+            var pts = new List<double[]>();
+            int[] positions = {0,1,2,3};
+            foreach (int bPos in positions) {
+                var others = positions.Where(i => i != bPos).ToArray();
+                foreach (double bSign in new[]{1.0,-1.0}) {
+                    for (int mask = 0; mask < 8; mask++) {
+                        double s0 = (mask&1) != 0 ? -1 : 1;
+                        double s1 = (mask&2) != 0 ? -1 : 1;
+                        double s2 = (mask&4) != 0 ? -1 : 1;
+                        if (bSign * s0 * s1 * s2 > 0) { // even parity
+                            var v = new double[4];
+                            v[bPos] = bSign * b;
+                            v[others[0]] = s0; v[others[1]] = s1; v[others[2]] = s2;
+                            pts.Add(v);
+                        }
+                    }
+                }
+            }
+            Console.WriteLine($"V={pts.Count}");
+            var hull = TrueConvexHull4D.Compute(pts, 1e-6);
+            Console.WriteLine($"hull: V={hull.Vertices.Count} E={hull.Edges.Count} F={hull.Faces.Count} C={hull.Cells.Count}");
+            Console.WriteLine($"Expected: V=32 E=96 F=80 C=16");
+            Assert.Pass();
+        }
+
+        [Test]
         public void DiagReversedB4()
         {
             // Reversed B4 matrix: 4-bond at nodes 2-3 instead of 0-1
