@@ -421,6 +421,10 @@ namespace D4BB.Geometry
                     {
                         double dot = 0;
                         for (int k = 0; k < 4; k++) dot += v[k] * mirrors[i][k];
+                        
+                        // If the point is on the mirror, reflecting it yields the same point.
+                        if (Math.Abs(dot) < 1e-8) continue;
+
                         double[] next = new double[4];
                         for (int k = 0; k < 4; k++) next[k] = v[k] - 2 * dot * mirrors[i][k];
                         string key = VKey(next);
