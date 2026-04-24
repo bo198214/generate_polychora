@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using D4BB.Geometry;
 
 // Usage:
@@ -57,6 +59,8 @@ static void RunVertexGeneration(string vertexDir)
         ("frico","F4",5), ("grico","F4",7), ("prico","F4",9),
         ("drico","F4",11), ("trico","F4",15),
         ("hi","H4",1), ("ex","H4",8), ("rhi","H4",2), ("tex","H4",12), ("rex","H4",4),
+        // Missing B4 forms
+        ("srit","B4",5), ("prit","B4",13),
     };
 
     int ok = 0;
@@ -70,7 +74,22 @@ static void RunVertexGeneration(string vertexDir)
         Console.WriteLine($"  {name,-10} {grp}/{an}: {pts.Count} vertices");
         ok++;
     }
+
+    // Non-Wythoffian polytopes
+    WriteNonWythoffian(vertexDir, "snic", "snub-24-cell", SnubGenerator.SnubIcositetrachoron());
+    WriteNonWythoffian(vertexDir, "gap",  "grand-antiprism", SnubGenerator.GrandAntiprism());
+    ok += 2;
+
     Console.WriteLine($"Done: {ok} vertex files written.\n");
+}
+
+static void WriteNonWythoffian(string dir, string name, string source, List<double[]> pts)
+{
+    var json = System.Text.Json.JsonSerializer.Serialize(
+        new { name, source, vertices = pts },
+        new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+    File.WriteAllText(Path.Combine(dir, $"{name}.json"), json);
+    Console.WriteLine($"  {name,-10} {source}: {pts.Count} vertices");
 }
 
 static void RunTopologyGeneration(string vertexDir, string topologyDir)
