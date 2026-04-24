@@ -8,7 +8,11 @@
       "WebFetch(domain:en.wikipedia.org)",
       "WebFetch(domain:polytope.miraheze.org)",
       "WebFetch(domain:www.qfbox.info)",
-      "WebFetch(domain:www.polytope.net)"
+      "WebFetch(domain:www.polytope.net)",
+      "PowerShell(Stop-Process -Name \"testhost\" -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2; Set-Location \"p:/workspace/generate_polychora\"; dotnet build Tests/ -q 2>&1 | Select-String -Pattern \"Error|error\" | Where-Object { $_ -notmatch \"0 Error\" } | Select-Object -First 3)",
+      "Bash(handle \"p:/workspace/generate_polychora/Tests/bin/Debug/net8.0/generate_polychora.dll\")",
+      "PowerShell(dotnet build \"p:/workspace/generate_polychora/Tests/\" -q 2>&1)",
+      "PowerShell(dotnet build \"p:/workspace/generate_polychora/Tests/\" 2>&1)"
     ]
   }
 }

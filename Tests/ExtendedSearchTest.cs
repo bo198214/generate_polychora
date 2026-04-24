@@ -56,6 +56,26 @@ namespace D4BB.GeometryTests
             Assert.Pass();
         }
 
+        [Test, CancelAfter(300000)]
+        public void FindF4LargeActiveNodes()
+        {
+            // Compute topology for F4 an=7,11,13,14,15 (V=576 or 1152)
+            var byVEFC = AllExpected.ToDictionary(x => (x.v, x.e, x.f, x.c), x => x.name);
+            var candidates = new[] { 5, 7, 10, 11, 13, 14, 15 };
+            Console.WriteLine("=== F4 large activeNodes ===");
+            foreach (int an in candidates) {
+                var pts = PolychoraGenerator.GenerateVertices("F4", an);
+                Console.WriteLine($"F4/an={an}: V={pts.Count}");
+                if (pts.Count > 1200) { Console.WriteLine("  (too large)"); continue; }
+                var hull = TrueConvexHull4D.Compute(pts, 1e-6);
+                var key = (hull.Vertices.Count, hull.Edges.Count, hull.Faces.Count, hull.Cells.Count);
+                string match = byVEFC.TryGetValue(key, out var n) ? $" <-- {n} ✓" : "";
+                Console.WriteLine($"  hull ({key.Item1},{key.Item2},{key.Item3},{key.Item4}){match}");
+                if (match.Length > 0) { SaveJson(n, $"F4/{an}", pts); Console.WriteLine($"  Saved {n}.json"); }
+            }
+            Assert.Pass();
+        }
+
         [Test, CancelAfter(120000)]
         public void FindB4F4Remaining()
         {
