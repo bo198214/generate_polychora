@@ -92,5 +92,45 @@ namespace D4BB.GeometryTests
             foreach (var g in cellSizes) Console.WriteLine($"  cells with {g.Key} verts: {g.Count()}");
             Assert.Pass();
         }
+
+        [Test]
+        public void RegenerateKnownPolychora()
+        {
+            // Known mappings: (name, expectedV, expectedE, expectedF, expectedC, group, activeNodes)
+            var mappings = new (string name, int v, int e, int f, int c, string group, int an)[] {
+                ("pen",    5,  10,  10,   5, "A4",  1), ("rap",   10,  30,  30,  10, "A4",  2),
+                ("tip",   20,  40,  30,  10, "A4",  3), ("deca",  30,  60,  40,  10, "A4",  6),
+                ("hap",   30,  90,  80,  20, "A4",  5), ("tap",   60, 120,  80,  20, "A4",  7),
+                ("dappat",60, 150, 120,  30, "A4", 11), ("tappy",120, 240, 150,  30, "A4", 15),
+                ("tes",   16,  32,  24,   8, "B4",  1), ("hex",    8,  24,  32,  16, "B4",  8),
+                ("spic",  96, 288, 240,  48, "B4", 10),
+                ("ico",   24,  96,  96,  24, "F4",  1), ("cont", 192, 384, 240,  48, "F4",  3),
+                ("srico",288, 576, 336,  48, "F4",  6), ("prico",144, 576, 672, 240, "F4",  9),
+                ("hi",   600,1200, 720, 120, "H4",  1), ("ex",   120, 720,1200, 600, "H4",  8),
+                ("rhi", 1200,3600,3120, 720, "H4",  2), ("rex",  720,3600,3600, 720, "H4",  4),
+            };
+            string outDir = Path.GetFullPath(Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "output"));
+            int ok = 0, fail = 0;
+            foreach (var m in mappings) {
+                var pts = PolychoraGenerator.GenerateVertices(m.group, m.an);
+                var json = JsonSerializer.Serialize(new {
+                    name = m.name, group = $"{m.group}/{m.an}", vertices = pts
+                }, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(Path.Combine(outDir, $"{m.name}.json"), json);
+                if (pts.Count <= 1500) {
+                    var hull = TrueConvexHull4D.Compute(pts, 1e-6);
+                    bool match = hull.Vertices.Count==m.v && hull.Edges.Count==m.e
+                               && hull.Faces.Count==m.f && hull.Cells.Count==m.c;
+                    Console.WriteLine($"{m.name,-10} {m.group}/{m.an}: {(match?"✓":"✗")} got ({hull.Vertices.Count},{hull.Edges.Count},{hull.Faces.Count},{hull.Cells.Count})");
+                    if (match) ok++; else fail++;
+                } else {
+                    Console.WriteLine($"{m.name,-10} {m.group}/{m.an}: V={pts.Count} (large)");
+                    ok++;
+                }
+            }
+            Console.WriteLine($"\n{ok} regenerated OK, {fail} failed");
+            Assert.That(fail, Is.EqualTo(0), "Some regenerated polytopes don't match expected topology");
+        }
     }
 }
