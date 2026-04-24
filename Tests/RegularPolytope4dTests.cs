@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using D4BB.Geometry;
 using NUnit.Framework;
 
@@ -62,22 +63,11 @@ namespace D4BB.GeometryTests
 
         static List<double[]> ParseVertices(string json)
         {
-            var result = new List<double[]>();
-            int vIdx = json.IndexOf("\"vertices\"", StringComparison.Ordinal);
-            if (vIdx == -1) return result;
-            int startArr = json.IndexOf('[', vIdx);
-            int depth = 0, startPoint = -1;
-            for (int i = startArr; i < json.Length; i++) {
-                if (json[i] == '[') { depth++; if (depth == 2) startPoint = i + 1; }
-                else if (json[i] == ']') {
-                    if (depth == 2) {
-                        string s = json.Substring(startPoint, i - startPoint);
-                        result.Add(s.Split(',').Select(x => double.Parse(x.Trim(), System.Globalization.CultureInfo.InvariantCulture)).ToArray());
-                    }
-                    depth--; if (depth == 0) break;
-                }
-            }
-            return result;
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("vertices")
+                .EnumerateArray()
+                .Select(v => v.EnumerateArray().Select(x => x.GetDouble()).ToArray())
+                .ToList();
         }
     }
 }

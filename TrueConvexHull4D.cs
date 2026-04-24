@@ -103,10 +103,16 @@ namespace D4BB.Geometry
             for (int i = 0; i < pts.Count; i++)
             {
                 if (ridge.Contains(i)) continue;
-                var n = Cross4D(e1, e2, Sub(pts[i], v0));
-                if (Mag(n) < 1e-10) continue;
-                if (Dot(n, prevN) > 1.0 - 1e-9) continue; 
-                double d = Dot(n, pts[i]);
+                var raw = Cross4DRaw(e1, e2, Sub(pts[i], v0));
+                if (Mag(raw) < 1e-10) continue;
+                var n = Normalize(raw);
+                double d = Dot(n, v0);
+                // Orient n outward: first non-plane point must be on negative side
+                for (int l = 0; l < pts.Count; l++) {
+                    double v = Dot(n, pts[l]) - d;
+                    if (Math.Abs(v) > eps) { if (v > 0) { n = Scale(n, -1); d = -d; } break; }
+                }
+                if (Dot(n, prevN) > 1.0 - 1e-9) continue;
                 if (IsExtreme(pts, n, d, eps)) {
                     double a = Math.Acos(Math.Max(-1, Math.Min(1, Dot(n, prevN))));
                     if (a < minA) { minA = a; bestN = n; }
@@ -128,14 +134,19 @@ namespace D4BB.Geometry
         static double[] FindInitialNormal(List<double[]> pts, double eps)
         {
             int p0 = 0; for (int i = 1; i < pts.Count; i++) if (pts[i][0] < pts[p0][0]) p0 = i;
+            var centroid = new double[4];
+            foreach (var p in pts) for (int c = 0; c < 4; c++) centroid[c] += p[c] / pts.Count;
             for (int i = 0; i < pts.Count; i++)
             for (int j = i+1; j < pts.Count; j++)
             for (int k = j+1; k < pts.Count; k++)
             {
-                var n = Cross4D(Sub(pts[i], pts[p0]), Sub(pts[j], pts[p0]), Sub(pts[k], pts[p0]));
-                if (Mag(n) < 1e-10) continue;
-                if (IsExtreme(pts, n, Dot(pts[p0], n), eps)) return n;
-                if (IsExtreme(pts, Scale(n, -1), Dot(pts[p0], Scale(n, -1)), eps)) return Scale(n, -1);
+                var raw = Cross4DRaw(Sub(pts[i], pts[p0]), Sub(pts[j], pts[p0]), Sub(pts[k], pts[p0]));
+                if (Mag(raw) < 1e-10) continue;
+                var n = Normalize(raw);
+                double d = Dot(pts[p0], n);
+                // Orient n outward: centroid must be on negative side
+                if (Dot(centroid, n) > d) { n = Scale(n, -1); d = -d; }
+                if (IsExtreme(pts, n, d, eps)) return n;
             }
             return new[] { 1.0, 0, 0, 0 };
         }
@@ -154,13 +165,13 @@ namespace D4BB.Geometry
         static double[] Normalize(double[] a) { double m = Mag(a); return m < 1e-15 ? a : Scale(a, 1/m); }
         static double[] Scale(double[] a, double s) { var r = new double[a.Length]; for (int i = 0; i < a.Length; i++) r[i] = a[i]*s; return r; }
         static double[] Cross3D(double[] u, double[] v) => new[] { u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0] };
-        static double[] Cross4D(double[] u, double[] v, double[] w) {
+        static double[] Cross4DRaw(double[] u, double[] v, double[] w) {
             var r = new double[4];
             r[0] =  (u[1]*(v[2]*w[3]-v[3]*w[2]) - u[2]*(v[1]*w[3]-v[3]*w[1]) + u[3]*(v[1]*w[2]-v[2]*w[1]));
             r[1] = -(u[0]*(v[2]*w[3]-v[3]*w[2]) - u[2]*(v[0]*w[3]-v[3]*w[0]) + u[3]*(v[0]*w[2]-v[2]*w[0]));
             r[2] =  (u[0]*(v[1]*w[3]-v[3]*w[1]) - u[1]*(v[0]*w[3]-v[3]*w[0]) + u[3]*(v[0]*w[1]-v[1]*w[0]));
             r[3] = -(u[0]*(v[1]*w[2]-v[2]*w[1]) - u[1]*(v[0]*w[2]-v[2]*w[0]) + u[2]*(v[0]*w[1]-v[1]*w[0]));
-            return Normalize(r);
+            return r;
         }
         static double[][] GetOrthoBasis(List<double[]> pts, List<int> verts, int dim) {
             var b = new double[dim][]; var v0 = pts[verts[0]]; int f = 0;
