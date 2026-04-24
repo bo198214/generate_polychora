@@ -245,7 +245,7 @@ namespace D4BB.Geometry
                 return vertices;
             }
 
-            private static string VKey(double[] v) { return string.Join(",", v.Select(x => Math.Round(x, 8).ToString("F8"))); }
+            private static string VKey(double[] v) { return string.Join(",", v.Select(x => (Math.Round(x, 8) + 0.0).ToString("F8"))); }
         }
     }
 }

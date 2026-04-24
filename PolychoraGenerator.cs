@@ -106,7 +106,8 @@ namespace D4BB.Geometry
 
         private static string VKey(double[] v)
         {
-            return string.Join(",", v.Select(x => Math.Round(x, 8).ToString("F8")));
+            // +0.0 normalizes IEEE 754 negative zero (-0.0) to avoid duplicate vertices
+            return string.Join(",", v.Select(x => (Math.Round(x, 8) + 0.0).ToString("F8")));
         }
     }
 }
