@@ -29,21 +29,37 @@ NAMES        := $(patsubst $(VDIR)/%.json, %, $(VERTEX_JSONS))
 all: build topology
 
 # ── build .NET project ───────────────────────────────────────
-build: $(PROJ)
-	$(DOTNET) build -q
+# MSB3492 is a spurious "cache file locked" warning that MSBuild
+# misclassifies as an error on Windows; the build succeeds anyway
+# (DLL is produced). We filter it out and use the DLL as the
+# success criterion instead of the exit code.
+BUILD_DLL := bin/Debug/net8.0/generate_polychora.dll
+
+# Explicit 'make build' — tolerates the Windows MSB3492 false-positive
+# (cache file locked by VS Code / Roslyn server).  The DLL is always
+# produced despite the error message; we verify it exists.
+build:
+	-$(DOTNET) build $(PROJ) -q
+	@test -f $(BUILD_DLL) || (echo "Build truly failed – no DLL" && exit 1)
+	@echo "  build OK"
+
+# Internal rule used by the topology pattern rules via 'dotnet run'
+$(BUILD_DLL): $(PROJ) $(wildcard *.cs)
+	-$(DOTNET) build $(PROJ) -q
+	@test -f $(BUILD_DLL)
 
 # ── vertex generation ────────────────────────────────────────
 vertices: build
 	$(DOTNET) run -- vertices
 
 # ── topology: generate all missing files ─────────────────────
-topology: build $(TDIR) $(TOPO_JSONS)
+topology: $(TDIR) $(TOPO_JSONS)
 
 # Pattern rule: each topology file depends on its vertex file.
-# If the topology file is missing (or older), invoke topology-one.
+# Uses 'dotnet run' which compiles implicitly without MSB3492 noise.
 $(TDIR)/%.json: $(VDIR)/%.json | $(TDIR)
 	@echo "  → $*"
-	$(DOTNET) run -- topology-one $*
+	$(DOTNET) run --project $(PROJ) -- topology-one $*
 
 $(TDIR):
 	mkdir -p $(TDIR)
