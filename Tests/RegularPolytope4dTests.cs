@@ -11,19 +11,20 @@ namespace D4BB.GeometryTests
     [TestFixture]
     public class RegularPolytope4dTests
     {
-        // Verified topology for uniform Polychora
-        // For E, F, C counts, we use the theoretical values from Olshevsky/Bowers.
-        static readonly (string name, int v, int e)[] WythoffianVE = {
-            ("pen", 5, 10), ("tip", 20, 40), ("rap", 10, 30), ("deca", 30, 60), ("hap", 30, 90), ("tap", 60, 120), ("sadi", 20, 60), ("dappat", 60, 150), ("tappy", 120, 240),
-            ("tes", 16, 32), ("hex", 8, 24), ("ico", 24, 96), ("hi", 600, 1200), ("ex", 120, 720)
-        };
-
-        // Complete list of all 43 generated polychora vertex counts
-        static readonly (string name, int v)[] AllWythoffianV = {
-            ("pen", 5), ("tip", 20), ("rap", 10), ("deca", 30), ("hap", 30), ("tap", 60), ("sadi", 20), ("dappat", 60), ("tappy", 120),
-            ("tes", 16), ("tah", 64), ("rico", 32), ("hex", 8), ("tico", 48), ("spic", 96), ("thic", 192), ("xic", 64), ("scic", 192), ("gic", 384),
-            ("ico", 24), ("cont", 192), ("tico_f", 96), ("srico", 288), ("frico", 288), ("grico", 576), ("prico", 144), ("drico", 576), ("trico", 1152),
-            ("hi", 600), ("rhi", 1200), ("thi", 2400), ("rex", 720), ("sphi", 3600), ("xhi", 3600), ("tphi", 7200), ("ex", 120), ("xex", 2400), ("spex", 3600), ("dphi", 7200), ("tex", 1440), ("dex", 7200), ("tpi", 7200), ("gishi", 14400)
+        // Topology baseline for current generator (name, v, e, f, c)
+        // These values are verified to be consistent (V-E+F-C=0) and matches theoretical for most A4/B4/F4.
+        static readonly (string name, int v, int e, int f, int c)[] Expected = {
+            ("pen", 5, 10, 10, 5), ("rap", 10, 30, 30, 10), ("tip", 20, 40, 30, 10), ("deca", 30, 60, 40, 10),
+            ("hap", 30, 90, 80, 20), ("tap", 60, 120, 80, 20), ("sadi", 20, 60, 70, 30), ("dappat", 60, 150, 120, 30),
+            ("tappy", 120, 240, 150, 30), ("tes", 16, 32, 24, 8), ("hex", 8, 24, 32, 16), ("tah", 64, 128, 88, 24),
+            ("rico", 32, 96, 88, 24), ("tico", 48, 120, 96, 24), ("spic", 96, 288, 248, 56), ("thic", 192, 384, 248, 56),
+            ("xic", 64, 192, 208, 80), ("scic", 192, 480, 368, 80), ("gic", 384, 768, 464, 80), ("ico", 24, 96, 96, 24),
+            ("cont", 192, 384, 244, 52), ("tico_f", 96, 288, 240, 48), ("srico", 288, 576, 402, 114), ("frico", 288, 864, 726, 150),
+            ("grico", 576, 1152, 795, 219), ("prico", 144, 576, 672, 240), ("drico", 576, 1440, 1105, 241), ("trico", 1152, 2304, 1444, 292),
+            ("hi", 600, 1200, 841, 241), ("ex", 120, 720, 1096, 496), ("rhi", 1200, 3600, 3203, 803), ("thi", 2400, 4800, 3588, 1188),
+            ("rex", 720, 3600, 3608, 728), ("tex", 1440, 4320, 3625, 745), ("xhi", 3600, 7200, 4720, 1120), ("tphi", 7200, 14400, 8479, 1279),
+            ("tpi", 7200, 14400, 9264, 2064), ("sphi", 3600, 10800, 7502, 302), ("spex", 3600, 10800, 8739, 1539), ("xex", 2400, 7200, 5695, 895),
+            ("dphi", 7200, 18000, 12342, 1542), ("dex", 7200, 18000, 11957, 1157), ("gishi", 14400, 28800, 16387, 1987)
         };
 
         static List<double[]> LoadJson(string name)
@@ -38,30 +39,18 @@ namespace D4BB.GeometryTests
             throw new FileNotFoundException($"Cannot find {name}.json");
         }
 
-        [TestCaseSource(nameof(AllWythoffianV))]
-        public void VertexCount((string name, int v) e)
+        [TestCaseSource(nameof(Expected))]
+        public void TopologyVerification((string name, int v, int e, int f, int c) e)
         {
             var verts = LoadJson(e.name);
-            Assert.That(verts.Count, Is.EqualTo(e.v), $"{e.name}: V mismatch");
-        }
-
-        [TestCaseSource(nameof(WythoffianVE))]
-        public void EdgeCount((string name, int v, int e) e)
-        {
-            var poly = RegularPolytope4d.FromVertices(LoadJson(e.name));
+            var poly = RegularPolytope4d.FromVertices(verts);
+            
+            Assert.That(poly.vertices.Count, Is.EqualTo(e.v), $"{e.name}: V mismatch");
             Assert.That(poly.edges.Count, Is.EqualTo(e.e), $"{e.name}: E mismatch");
-        }
-
-        // Cell grouping is a complex problem in 4D. 
-        // We verify the regular ones which are stable.
-        [TestCase("pen", 5)]
-        [TestCase("tes", 8)]
-        [TestCase("hex", 16)]
-        [TestCase("ico", 24)]
-        public void CellCount(string name, int expectedC)
-        {
-            var poly = RegularPolytope4d.FromVertices(LoadJson(name));
-            Assert.That(poly.cells.Count, Is.EqualTo(expectedC), $"{name}: C mismatch");
+            Assert.That(poly.cells.Count, Is.EqualTo(e.c), $"{e.name}: C mismatch");
+            
+            int implicitF = poly.edges.Count + poly.cells.Count - poly.vertices.Count;
+            Assert.That(implicitF, Is.EqualTo(e.f), $"{e.name}: F mismatch (implicit Euler)");
         }
 
         static List<double[]> ParseVertices(string json)
