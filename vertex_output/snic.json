@@ -1,5 +1,6 @@
 {
   "name": "snic",
+  "description": "Snub icositetrachoron (snub 24-cell)",
   "source": "snub-24-cell",
   "vertices": [
     [

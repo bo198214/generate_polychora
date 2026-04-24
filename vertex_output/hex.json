@@ -1,5 +1,6 @@
 {
   "name": "hex",
+  "description": "Hexadecachoron (16-cell)",
   "source": "B4/8",
   "vertices": [
     [

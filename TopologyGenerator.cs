@@ -33,11 +33,11 @@ namespace D4BB.Geometry
                 var name = Path.GetFileNameWithoutExtension(file);
                 try
                 {
-                    var vertices = ReadVertices(file);
+                    var (vertices, description) = ReadVerticesAndDesc(file);
                     var hull = TrueConvexHull4D.Compute(vertices, eps);
 
                     var outPath = Path.Combine(topologyDir, $"{name}.json");
-                    WriteTopology(outPath, name, hull);
+                    WriteTopology(outPath, name, description, hull);
                     log?.Invoke($"  {name}: V={hull.Vertices.Count} E={hull.Edges.Count} F={hull.Faces.Count} C={hull.Cells.Count}");
                 }
                 catch (Exception ex)

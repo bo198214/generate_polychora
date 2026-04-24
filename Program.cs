@@ -43,56 +43,83 @@ switch (cmd)
         break;
 }
 
-static void RunVertexGeneration(string vertexDir)
+void RunVertexGeneration(string vertexDir)
 {
     Console.WriteLine($"Generating vertex files → {vertexDir}");
     Directory.CreateDirectory(vertexDir);
 
-    // (group, activeNodes) → polytope name, verified by TrueConvexHull4D
-    var mappings = new (string name, string grp, int an)[] {
-        ("pen","A4",1), ("rap","A4",2), ("tip","A4",3), ("deca","A4",6),
-        ("hap","A4",5), ("tap","A4",7), ("dappat","A4",11), ("tappy","A4",15),
-        ("tes","B4",1), ("hex","B4",8), ("rico","B4",2), ("tah","B4",3),
-        ("tico","B4",12), ("spic","B4",10), ("thic","B4",7), ("xic","B4",9),
-        ("scic","B4",11), ("gic","B4",15),
-        ("ico","F4",1), ("cont","F4",3), ("tico_f","B4",6), ("srico","F4",6),
-        ("frico","F4",5), ("grico","F4",7), ("prico","F4",9),
-        ("drico","F4",11), ("trico","F4",15),
-        ("hi","H4",1), ("ex","H4",8), ("rhi","H4",2), ("tex","H4",12), ("rex","H4",4),
-        // Missing B4 forms
-        ("srit","B4",5), ("prit","B4",13),
+    // (name, group, activeNodes, description)
+    var mappings = new (string name, string grp, int an, string desc)[] {
+        // A4 family (5-cell / pentachoron symmetry)
+        ("pen",    "A4", 1,  "Pentachoron (5-cell)"),
+        ("rap",    "A4", 2,  "Rectified pentachoron"),
+        ("tip",    "A4", 3,  "Truncated pentachoron"),
+        ("deca",   "A4", 6,  "Decachoron (bitruncated 5-cell)"),
+        ("hap",    "A4", 5,  "Small rhombated pentachoron"),
+        ("tap",    "A4", 7,  "Great rhombated pentachoron"),
+        ("dappat", "A4", 11, "Prismatorhombated pentachoron"),
+        ("tappy",  "A4", 15, "Great prismatodecachoron (omnitruncated 5-cell)"),
+        // B4 family (tesseract / 16-cell symmetry)
+        ("tes",    "B4", 1,  "Tesseract (8-cell)"),
+        ("hex",    "B4", 8,  "Hexadecachoron (16-cell)"),
+        ("rico",   "B4", 2,  "Rectified tesseract"),
+        ("tah",    "B4", 3,  "Truncated tesseract"),
+        ("tico",   "B4", 12, "Truncated hexadecachoron (truncated 16-cell)"),
+        ("spic",   "B4", 10, "Rectified icositetrachoron (rectified 24-cell, B4 form)"),
+        ("thic",   "B4", 7,  "Cantitruncated tesseract"),
+        ("xic",    "B4", 9,  "Runcinated tesseract"),
+        ("scic",   "B4", 11, "Runcitruncated tesseract"),
+        ("gic",    "B4", 15, "Omnitruncated tesseract"),
+        ("srit",   "B4", 5,  "Cantellated tesseract (small rhombated tesseract)"),
+        ("prit",   "B4", 13, "Runcitruncated hexadecachoron"),
+        // F4 family (24-cell / icositetrachoron symmetry)
+        ("ico",    "F4", 1,  "Icositetrachoron (24-cell)"),
+        ("cont",   "F4", 3,  "Truncated icositetrachoron (truncated 24-cell)"),
+        ("tico_f", "B4", 6,  "Bitruncated tesseract"),
+        ("srico",  "F4", 6,  "Small rhombated icositetrachoron"),
+        ("frico",  "F4", 5,  "Cantellated 24-cell"),
+        ("grico",  "F4", 7,  "Cantitruncated 24-cell"),
+        ("prico",  "F4", 9,  "Prismatorhombated icositetrachoron"),
+        ("drico",  "F4", 11, "Runcitruncated icositetrachoron"),
+        ("trico",  "F4", 15, "Omnitruncated icositetrachoron"),
+        // H4 family (120-cell / 600-cell symmetry)
+        ("hi",     "H4", 1,  "Hecatonicosachoron (120-cell)"),
+        ("ex",     "H4", 8,  "Hexacosichoron (600-cell)"),
+        ("rhi",    "H4", 2,  "Rectified 120-cell"),
+        ("tex",    "H4", 12, "Truncated 600-cell"),
+        ("rex",    "H4", 4,  "Rectified 600-cell"),
     };
 
     int ok = 0;
-    foreach (var (name, grp, an) in mappings)
+    var opts = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+    foreach (var (name, grp, an, desc) in mappings)
     {
         var pts = PolychoraGenerator.GenerateVertices(grp, an);
         var json = System.Text.Json.JsonSerializer.Serialize(
-            new { name, source = $"{grp}/{an}", vertices = pts },
-            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            new { name, description = desc, source = $"{grp}/{an}", vertices = pts }, opts);
         File.WriteAllText(Path.Combine(vertexDir, $"{name}.json"), json);
-        Console.WriteLine($"  {name,-10} {grp}/{an}: {pts.Count} vertices");
+        Console.WriteLine($"  {name,-10} {grp}/{an}: {pts.Count} vertices  ({desc})");
         ok++;
     }
 
     // Non-Wythoffian polytopes
-    WriteNonWythoffian(vertexDir, "snic", "snub-24-cell", SnubGenerator.SnubIcositetrachoron());
-    WriteNonWythoffian(vertexDir, "gap",  "grand-antiprism", SnubGenerator.GrandAntiprism());
+    WriteNonWythoffian(vertexDir, "snic", "Snub icositetrachoron (snub 24-cell)", "snub-24-cell",    SnubGenerator.SnubIcositetrachoron());
+    WriteNonWythoffian(vertexDir, "gap",  "Grand antiprism",                      "grand-antiprism", SnubGenerator.GrandAntiprism());
     ok += 2;
 
     Console.WriteLine($"Done: {ok} vertex files written.\n");
 }
 
-static void WriteNonWythoffian(string dir, string name, string source, List<double[]> pts)
+void WriteNonWythoffian(string dir, string name, string description, string source, List<double[]> pts)
 {
     var json = System.Text.Json.JsonSerializer.Serialize(
-        new { name, source, vertices = pts },
+        new { name, description, source, vertices = pts },
         new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
     File.WriteAllText(Path.Combine(dir, $"{name}.json"), json);
-    Console.WriteLine($"  {name,-10} {source}: {pts.Count} vertices");
+    Console.WriteLine($"  {name,-10} {source}: {pts.Count} vertices  ({description})");
 }
 
-static void RunTopologyGeneration(string vertexDir, string topologyDir)
+void RunTopologyGeneration(string vertexDir, string topologyDir)
 {
     Console.WriteLine($"Computing topology → {topologyDir}");
     TopologyGenerator.Generate(vertexDir, topologyDir, eps: 1e-6,

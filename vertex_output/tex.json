@@ -1,5 +1,6 @@
 {
   "name": "tex",
+  "description": "Truncated 600-cell",
   "source": "H4/12",
   "vertices": [
     [
