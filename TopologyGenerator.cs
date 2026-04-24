@@ -53,22 +53,26 @@ namespace D4BB.Geometry
             return doc.RootElement.GetProperty("vertices").GetArrayLength();
         }
 
-        static List<double[]> ReadVertices(string path)
+        static (List<double[]> vertices, string description) ReadVerticesAndDesc(string path)
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            return doc.RootElement.GetProperty("vertices")
+            var root = doc.RootElement;
+            var desc = root.TryGetProperty("description", out var d) ? d.GetString() ?? "" : "";
+            var verts = root.GetProperty("vertices")
                 .EnumerateArray()
                 .Select(v => v.EnumerateArray().Select(x => x.GetDouble()).ToArray())
                 .ToList();
+            return (verts, desc);
         }
 
-        static void WriteTopology(string outPath, string name, TrueConvexHull4D hull)
+        static void WriteTopology(string outPath, string name, string description, TrueConvexHull4D hull)
         {
             using var stream = File.Create(outPath);
             using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
 
             writer.WriteStartObject();
             writer.WriteString("name", name);
+            writer.WriteString("description", description);
 
             // vertices: array of 4D coordinate arrays
             writer.WritePropertyName("vertices");
