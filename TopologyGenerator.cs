@@ -31,12 +31,13 @@ namespace D4BB.Geometry
             foreach (var file in files)
             {
                 var name = Path.GetFileNameWithoutExtension(file);
+                var outPath = Path.Combine(topologyDir, $"{name}.json");
+                if (File.Exists(outPath)) { log?.Invoke($"  {name}: already exists, skipping"); continue; }
                 try
                 {
                     var (vertices, description) = ReadVerticesAndDesc(file);
                     var hull = TrueConvexHull4D.Compute(vertices, eps);
 
-                    var outPath = Path.Combine(topologyDir, $"{name}.json");
                     WriteTopology(outPath, name, description, hull);
                     log?.Invoke($"  {name}: V={hull.Vertices.Count} E={hull.Edges.Count} F={hull.Faces.Count} C={hull.Cells.Count}");
                 }
