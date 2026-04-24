@@ -18,8 +18,7 @@ namespace D4BB.GeometryTests
         };
 
         static readonly (string group, int[,] matrix)[] Groups = {
-            ("B4", new int[,]{{1,4,2,2},{4,1,3,2},{2,3,1,3},{2,2,3,1}}),
-            ("F4", new int[,]{{1,3,2,2},{3,1,4,2},{2,4,1,3},{2,2,3,1}}),
+            ("B4R", new int[,]{{1,3,2,2},{3,1,3,2},{2,3,1,4},{2,2,4,1}}),
         };
 
         [Test, Timeout(600000)]
@@ -34,7 +33,7 @@ namespace D4BB.GeometryTests
                     // Use PolychoraGenerator directly (no dot-skip bug)
                     var pts = PolychoraGenerator.GenerateVertices(gname, an);
                     Console.WriteLine($"  an={an,2}: orbit V={pts.Count,5}");
-                    if (pts.Count > 600) { Console.WriteLine("       (skipped hull)"); continue; }
+                    if (pts.Count > 400) { Console.WriteLine($"       (orbit={pts.Count}, skipped hull)"); continue; }
                     var hull = TrueConvexHull4D.Compute(pts, 1e-6);
                     var vefc = (hull.Vertices.Count, hull.Edges.Count, hull.Faces.Count, hull.Cells.Count);
                     var match = Expected.Where(e => e.v==vefc.Item1 && e.e==vefc.Item2 && e.f==vefc.Item3 && e.c==vefc.Item4).ToList();

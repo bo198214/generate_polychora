@@ -126,6 +126,12 @@ namespace D4BB.Geometry
                 if (Mag(raw) < 1e-10) continue;
                 var n = Normalize(raw);
                 double d = Dot(n, v0);
+                // All ridge vertices must lie on this hyperplane (required for valid pivot)
+                bool ridgeOnPlane = true;
+                for (int r = 3; r < ridge.Count; r++) {
+                    if (Math.Abs(Dot(n, pts[ridge[r]]) - d) > eps) { ridgeOnPlane = false; break; }
+                }
+                if (!ridgeOnPlane) continue;
                 // Orient n outward: first non-plane point must be on negative side
                 for (int l = 0; l < pts.Count; l++) {
                     double v = Dot(n, pts[l]) - d;
