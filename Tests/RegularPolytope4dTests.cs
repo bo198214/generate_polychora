@@ -19,13 +19,16 @@ public class RegularPolytope4dTests
         ("24-cell", 24,   96,  96,  24),
         ("120-cell", 600, 1200, 720, 120),
         ("600-cell", 120, 720, 1200, 600), // slow — enable for full verification
+        ("bitruncated_5_cell",30,90,20,20)
+
     };
 
     static List<double[]> LoadJson(string name)
     {
         // Look relative to the test project; fall back to unity-projects path
         var candidates = new[] {
-            Path.Combine(TestContext.CurrentContext.TestDirectory, @"test_data", $"{name}.json")
+            Path.Combine(TestContext.CurrentContext.TestDirectory, @"test_data", $"{name}.json"),
+            Path.Combine("p:\\unity-projects\\tesserian-6.3\\Assets\\uniform_polychora", $"{name}.json")
         };
         foreach (var path in candidates)
             if (File.Exists(path))
