@@ -48,6 +48,20 @@ namespace D4BB.Geometry
             }
         }
 
+        public static void GenerateOne(
+            string vertexDir, string topologyDir, string name,
+            double eps = 1e-6, Action<string> log = null)
+        {
+            Directory.CreateDirectory(topologyDir);
+            var file = Path.Combine(vertexDir, $"{name}.json");
+            if (!File.Exists(file)) { log?.Invoke($"  {name}: vertex file not found"); return; }
+            var (vertices, description) = ReadVerticesAndDesc(file);
+            var hull = TrueConvexHull4D.Compute(vertices, eps);
+            var outPath = Path.Combine(topologyDir, $"{name}.json");
+            WriteTopology(outPath, name, description, hull);
+            log?.Invoke($"  {name}: V={hull.Vertices.Count} E={hull.Edges.Count} F={hull.Faces.Count} C={hull.Cells.Count}");
+        }
+
         static int ReadVertexCount(string path)
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(path));

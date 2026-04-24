@@ -35,11 +35,17 @@ switch (cmd)
         RunVertexGeneration(vertexDir);
         RunTopologyGeneration(vertexDir, topologyDir);
         break;
+    case "topology-one" when args.Length >= 2:
+        // Generate topology for a single polytope by name (used by Makefile)
+        TopologyGenerator.GenerateOne(vertexDir, topologyDir, args[1], eps: 1e-6,
+            log: msg => Console.WriteLine(msg));
+        break;
     default:
-        Console.WriteLine("Usage: dotnet run -- <vertices|topology|all>");
-        Console.WriteLine("  vertices  – regenerate vertex JSONs in vertex_output/");
-        Console.WriteLine("  topology  – compute topology JSONs in topology_output/");
-        Console.WriteLine("  all       – both steps");
+        Console.WriteLine("Usage: dotnet run -- <vertices|topology|all|topology-one NAME>");
+        Console.WriteLine("  vertices         – regenerate all vertex JSONs");
+        Console.WriteLine("  topology         – compute topology for missing files");
+        Console.WriteLine("  all              – both steps");
+        Console.WriteLine("  topology-one N   – (re)compute topology for one polytope");
         break;
 }
 
