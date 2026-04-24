@@ -12,6 +12,17 @@ namespace D4BB.GeometryTests
     public class DiagTest
     {
         [Test]
+        public void DiagB4Orbits()
+        {
+            for (int an = 1; an <= 15; an++)
+            {
+                var pts = PolychoraGenerator.GenerateVertices("B4", an);
+                Console.WriteLine($"B4 an={an,2}: {pts.Count,5} vertices, first={string.Join(",", pts[0].Select(x=>x.ToString("F2")))}");
+            }
+            Assert.Pass();
+        }
+
+        [Test]
         public void DiagRico()
         {
             var json = File.ReadAllText(@"P:\workspace\generate_polychora\output\rico.json");
