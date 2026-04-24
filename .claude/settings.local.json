@@ -4,7 +4,11 @@
       "Bash(dotnet test *)",
       "Bash(kill %1)",
       "Bash(dotnet build *)",
-      "WebSearch"
+      "WebSearch",
+      "WebFetch(domain:en.wikipedia.org)",
+      "WebFetch(domain:polytope.miraheze.org)",
+      "WebFetch(domain:www.qfbox.info)",
+      "WebFetch(domain:www.polytope.net)"
     ]
   }
 }
