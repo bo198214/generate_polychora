@@ -10,6 +10,8 @@ namespace D4BB.Geometry
         public List<int[]> Edges = new List<int[]>();
         public List<int[]> Faces = new List<int[]>();
         public List<int[]> Cells = new List<int[]>();
+        /// <summary>Outward unit normals, one per cell (parallel to Cells list).</summary>
+        public List<double[]> Normals = new List<double[]>();
 
         public static TrueConvexHull4D Compute(List<double[]> points, double eps = 1e-7)
         {
@@ -17,9 +19,11 @@ namespace D4BB.Geometry
             if (points.Count < 5) return hull;
 
             var discoveredCells = new List<List<int>>();
+            var discoveredNormals = new List<double[]>();
             var firstNormal = FindInitialNormal(points, eps);
             var firstCell = GetSupportFace(points, firstNormal, eps);
             discoveredCells.Add(firstCell);
+            discoveredNormals.Add(firstNormal);
 
             var ridgeQueue = new Queue<(List<int> ridge, double[] currentNormal)>();
             foreach (var f in FindMaximalFacets(points, firstCell, 3, eps)) ridgeQueue.Enqueue((f, firstNormal));
@@ -37,6 +41,7 @@ namespace D4BB.Geometry
                 if (cellKeys.Add(GetKey(nextCell)))
                 {
                     discoveredCells.Add(nextCell);
+                    discoveredNormals.Add(nextNormal);
                     foreach (var subFacet in FindMaximalFacets(points, nextCell, 3, eps))
                         if (ridgeKeys.Add(GetKey(subFacet))) { discoveredFaces.Add(subFacet); ridgeQueue.Enqueue((subFacet, nextNormal)); }
                 }
@@ -49,6 +54,7 @@ namespace D4BB.Geometry
 
             hull.Cells = discoveredCells.Select(c => c.ToArray()).ToList();
             hull.Faces = discoveredFaces.Select(f => f.ToArray()).ToList();
+            hull.Normals = discoveredNormals;
             return hull;
         }
 

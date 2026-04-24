@@ -16,7 +16,7 @@ namespace D4BB.GeometryTests
     public class ExtendedSearchTest
     {
         static readonly string OutDir = Path.GetFullPath(Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "output"));
+            AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "vertex_output"));
 
         // All expected polytope topologies
         static readonly (string name, int v, int e, int f, int c)[] AllExpected = {
@@ -127,6 +127,22 @@ namespace D4BB.GeometryTests
             var json = JsonSerializer.Serialize(new { name, source, vertices = verts },
                 new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(Path.Combine(OutDir, $"{name}.json"), json);
+        }
+
+        [Test, CancelAfter(600000)]
+        public void GenerateTopologyOutput()
+        {
+            string vertexDir  = Path.GetFullPath(Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "vertex_output"));
+            string topologyDir = Path.GetFullPath(Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "topology_output"));
+
+            TopologyGenerator.Generate(vertexDir, topologyDir, eps: 1e-6,
+                log: msg => Console.WriteLine(msg));
+
+            var written = Directory.GetFiles(topologyDir, "*.json").Length;
+            Console.WriteLine($"\nWrote {written} topology files to {topologyDir}");
+            Assert.That(written, Is.GreaterThan(0));
         }
     }
 }

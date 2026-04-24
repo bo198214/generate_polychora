@@ -1,0 +1,120 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+
+namespace D4BB.Geometry
+{
+    /// <summary>
+    /// Reads vertex data from vertex_output/, computes convex hull topology,
+    /// and writes the result to topology_output/ as JSON with fields:
+    /// vertices, edges, faces2d, cells, normals.
+    /// </summary>
+    public static class TopologyGenerator
+    {
+        public static void Generate(
+            string vertexDir,
+            string topologyDir,
+            double eps = 1e-6,
+            Action<string> log = null)
+        {
+            Directory.CreateDirectory(topologyDir);
+            var files = Directory.GetFiles(vertexDir, "*.json").OrderBy(f => f).ToArray();
+            log?.Invoke($"Generating topology for {files.Length} polytopes...");
+
+            foreach (var file in files)
+            {
+                var name = Path.GetFileNameWithoutExtension(file);
+                try
+                {
+                    var vertices = ReadVertices(file);
+                    var hull = TrueConvexHull4D.Compute(vertices, eps);
+
+                    var outPath = Path.Combine(topologyDir, $"{name}.json");
+                    WriteTopology(outPath, name, hull);
+                    log?.Invoke($"  {name}: V={hull.Vertices.Count} E={hull.Edges.Count} F={hull.Faces.Count} C={hull.Cells.Count}");
+                }
+                catch (Exception ex)
+                {
+                    log?.Invoke($"  {name}: ERROR – {ex.Message}");
+                }
+            }
+        }
+
+        static List<double[]> ReadVertices(string path)
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.GetProperty("vertices")
+                .EnumerateArray()
+                .Select(v => v.EnumerateArray().Select(x => x.GetDouble()).ToArray())
+                .ToList();
+        }
+
+        static void WriteTopology(string outPath, string name, TrueConvexHull4D hull)
+        {
+            using var stream = File.Create(outPath);
+            using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
+
+            writer.WriteStartObject();
+            writer.WriteString("name", name);
+
+            // vertices: array of 4D coordinate arrays
+            writer.WritePropertyName("vertices");
+            writer.WriteStartArray();
+            foreach (var v in hull.Vertices)
+            {
+                writer.WriteStartArray();
+                foreach (var x in v) writer.WriteNumberValue(Math.Round(x, 8));
+                writer.WriteEndArray();
+            }
+            writer.WriteEndArray();
+
+            // edges: array of [i, j] index pairs
+            writer.WritePropertyName("edges");
+            writer.WriteStartArray();
+            foreach (var e in hull.Edges)
+            {
+                writer.WriteStartArray();
+                foreach (var i in e) writer.WriteNumberValue(i);
+                writer.WriteEndArray();
+            }
+            writer.WriteEndArray();
+
+            // faces2d: array of vertex-index lists (2D faces / ridges)
+            writer.WritePropertyName("faces2d");
+            writer.WriteStartArray();
+            foreach (var f in hull.Faces)
+            {
+                writer.WriteStartArray();
+                foreach (var i in f) writer.WriteNumberValue(i);
+                writer.WriteEndArray();
+            }
+            writer.WriteEndArray();
+
+            // cells: array of vertex-index lists (3D cells)
+            writer.WritePropertyName("cells");
+            writer.WriteStartArray();
+            foreach (var c in hull.Cells)
+            {
+                writer.WriteStartArray();
+                foreach (var i in c) writer.WriteNumberValue(i);
+                writer.WriteEndArray();
+            }
+            writer.WriteEndArray();
+
+            // normals: outward unit normals, one 4D vector per cell
+            writer.WritePropertyName("normals");
+            writer.WriteStartArray();
+            foreach (var n in hull.Normals)
+            {
+                writer.WriteStartArray();
+                foreach (var x in n) writer.WriteNumberValue(Math.Round(x, 8));
+                writer.WriteEndArray();
+            }
+            writer.WriteEndArray();
+
+            writer.WriteEndObject();
+        }
+    }
+}

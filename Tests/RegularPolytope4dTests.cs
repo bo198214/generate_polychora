@@ -54,7 +54,7 @@ namespace D4BB.GeometryTests
         {
             var candidates = new[] {
                 Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "Assets", "uniform_polychora", $"{name}.json"),
-                Path.Combine("P:\\workspace\\generate_polychora\\output", $"{name}.json")
+                Path.Combine("P:\\workspace\\generate_polychora\\vertex_output", $"{name}.json")
             };
             foreach (var path in candidates)
                 if (File.Exists(path)) return ParseVertices(File.ReadAllText(path));
