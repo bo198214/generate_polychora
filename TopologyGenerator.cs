@@ -20,7 +20,12 @@ namespace D4BB.Geometry
             Action<string> log = null)
         {
             Directory.CreateDirectory(topologyDir);
-            var files = Directory.GetFiles(vertexDir, "*.json").OrderBy(f => f).ToArray();
+            // Sort by vertex count (ascending) so small polytopes are processed first.
+            var files = Directory.GetFiles(vertexDir, "*.json")
+                .Select(f => (path: f, count: ReadVertexCount(f)))
+                .OrderBy(x => x.count)
+                .Select(x => x.path)
+                .ToArray();
             log?.Invoke($"Generating topology for {files.Length} polytopes...");
 
             foreach (var file in files)
@@ -40,6 +45,12 @@ namespace D4BB.Geometry
                     log?.Invoke($"  {name}: ERROR – {ex.Message}");
                 }
             }
+        }
+
+        static int ReadVertexCount(string path)
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return doc.RootElement.GetProperty("vertices").GetArrayLength();
         }
 
         static List<double[]> ReadVertices(string path)
