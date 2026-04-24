@@ -24,8 +24,6 @@ namespace D4BB.Geometry
             {
                 case "A4": return new double[,] { {1,3,2,2}, {3,1,3,2}, {2,3,1,3}, {2,2,3,1} };
                 case "B4": return new double[,] { {1,4,2,2}, {4,1,3,2}, {2,3,1,3}, {2,2,3,1} };
-                // B4R = B4 with nodes reversed (4-bond at positions 2-3)
-                case "B4R": return new double[,] { {1,3,2,2}, {3,1,3,2}, {2,3,1,4}, {2,2,4,1} };
                 case "F4": return new double[,] { {1,3,2,2}, {3,1,4,2}, {2,4,1,3}, {2,2,3,1} };
                 case "H4": return new double[,] { {1,5,2,2}, {5,1,3,2}, {2,3,1,3}, {2,2,3,1} };
                 default: throw new ArgumentException("Unknown group");
