@@ -73,7 +73,20 @@ namespace D4BB.Geometry
                     if (seen.Add(GetKey(f))) facets.Add(f);
                 }
             }
-            return facets;
+            // Keep only maximal facets — discard any whose vertex set is a proper subset of a larger facet
+            var facetSets = facets.Select(f => new HashSet<int>(f)).ToList();
+            var maximal = new List<List<int>>();
+            for (int i = 0; i < facets.Count; i++)
+            {
+                bool isSubset = false;
+                for (int j = 0; j < facets.Count; j++)
+                {
+                    if (facets[j].Count <= facets[i].Count) continue;
+                    if (facets[i].All(v => facetSets[j].Contains(v))) { isSubset = true; break; }
+                }
+                if (!isSubset) maximal.Add(facets[i]);
+            }
+            return maximal;
         }
 
         static List<List<int>> FindPolygonEdges(List<double[]> allPts, List<int> verts, double eps)
@@ -98,7 +111,13 @@ namespace D4BB.Geometry
             var v0 = pts[ridge[0]];
             var e1 = Sub(pts[ridge[1]], v0);
             var e2 = Sub(pts[ridge[2]], v0);
-            double minA = double.MaxValue;
+
+            // Build a second basis vector for the 2D rotation plane (complement of ridge span).
+            // p2 = unit vector perpendicular to e1, e2, prevN — gives signed rotation angle.
+            var p2raw = Cross4DRaw(e1, e2, prevN);
+            var p2 = Mag(p2raw) > 1e-9 ? Normalize(p2raw) : null;
+
+            double minTheta = double.MaxValue;
             double[] bestN = null;
             for (int i = 0; i < pts.Count; i++)
             {
@@ -112,10 +131,15 @@ namespace D4BB.Geometry
                     double v = Dot(n, pts[l]) - d;
                     if (Math.Abs(v) > eps) { if (v > 0) { n = Scale(n, -1); d = -d; } break; }
                 }
-                if (Dot(n, prevN) > 1.0 - 1e-9) continue;
+                // Signed rotation angle from prevN to n in the (prevN, p2) plane.
+                // Maps to (0, 2π]: skip zero (same cell) and pick smallest positive angle.
+                double cosT = Dot(n, prevN);
+                double sinT = p2 != null ? -Dot(n, p2) : 0;  // negative = correct CCW direction
+                double theta = Math.Atan2(sinT, cosT);
+                if (theta <= 1e-9) theta += 2 * Math.PI;
+                if (theta > 2 * Math.PI - 1e-9) continue;
                 if (IsExtreme(pts, n, d, eps)) {
-                    double a = Math.Acos(Math.Max(-1, Math.Min(1, Dot(n, prevN))));
-                    if (a < minA) { minA = a; bestN = n; }
+                    if (theta < minTheta) { minTheta = theta; bestN = n; }
                 }
             }
             return bestN;
