@@ -13,7 +13,8 @@
       "Bash(handle \"p:/workspace/generate_polychora/Tests/bin/Debug/net8.0/generate_polychora.dll\")",
       "PowerShell(dotnet build \"p:/workspace/generate_polychora/Tests/\" -q 2>&1)",
       "PowerShell(dotnet build \"p:/workspace/generate_polychora/Tests/\" 2>&1)",
-      "Bash(grep -v \"^obj$\\\\|^bin$\")"
+      "Bash(grep -v \"^obj$\\\\|^bin$\")",
+      "Bash(dotnet run *)"
     ]
   }
 }
