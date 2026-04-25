@@ -88,11 +88,4 @@ clean-topology:
 
 # ── status overview ───────────────────────────────────────────
 status:
-	@echo "vertex_output:   $$(ls $(VDIR)/*.json 2>/dev/null | wc -l) files"
-	@echo "topology_output: $$(ls $(TDIR)/*.json 2>/dev/null | wc -l) files"
-	@python -c "\
-import os; \
-v=set(os.listdir('$(VDIR)')); \
-t=set(os.listdir('$(TDIR)') if os.path.isdir('$(TDIR)') else []); \
-m=sorted(v-t); \
-print('Missing topology: '+', '.join(f[:-5] for f in m) if m else 'All topology files present.')"
+	@python status.py
