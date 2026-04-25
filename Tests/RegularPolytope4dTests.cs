@@ -30,8 +30,8 @@ namespace D4BB.GeometryTests
             ("rex", 720, 3600, 3600, 720), ("tex", 1440, 4320, 3600, 720), ("xhi", 3600, 7200, 4320, 720), ("grahi", 7200, 14400, 9120, 1920),
             ("prix", 7200, 18000, 13440, 2640), ("srahi", 3600, 10800, 9120, 1920), ("srix", 3600, 10800, 8640, 1440), ("sidpixhi", 2400, 7200, 7440, 2640),
             // Large H4 polytopes — values verified against Klitzing/Wikipedia
-            ("grix", 7200, 14400, 8640, 1440), 
-            //("prahi", 7200, 18000, 13440, 2640), //this is numerically unstable but we don't need it, so let it be
+            ("grix", 7200, 14400, 8640, 1440),
+            ("prahi", 7200, 18000, 13440, 2640),
             ("gidpixhi", 14400, 28800, 17040, 2640),
             // Non-Wythoffian
             ("gap", 100, 500, 720, 320), ("snic", 96, 432, 480, 144)
@@ -43,6 +43,9 @@ namespace D4BB.GeometryTests
         [TestCaseSource(nameof(All47))]
         public void TopologyFileVerification((string name, int v, int e, int f, int c) expected)
         {
+            if (expected.name == "prahi")
+                Assert.Ignore("prahi: numerically unstable at current eps, topology file not generated");
+
             var path = Path.Combine(TopoDir, $"{expected.name}.json");
             if (!File.Exists(path))
                 Assert.Ignore($"{expected.name}: topology_output/{expected.name}.json not yet generated (run 'make topology')");
