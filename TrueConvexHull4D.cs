@@ -12,6 +12,8 @@ namespace D4BB.Geometry
         public List<int[]> Cells = new List<int[]>();
         /// <summary>Outward unit normals, one per cell (parallel to Cells list).</summary>
         public List<double[]> Normals = new List<double[]>();
+        /// <summary>For each cell: sorted indices into Faces (faces2d) that are geometric facets of that cell.</summary>
+        public List<int[]> CellFaces = new List<int[]>();
 
         public static TrueConvexHull4D Compute(List<double[]> points, double eps = 1e-7,
                                                Action<int> onCellDiscovered = null,
@@ -72,11 +74,30 @@ namespace D4BB.Geometry
             onCellDiscovered?.Invoke(1);   // signal: initialisation done, ridge loop starting
 
             var ridgeQueue = new Queue<(List<int> ridge, double[] currentNormal)>();
-            foreach (var f in FindMaximalFacets(points, firstCell, 3, eps)) ridgeQueue.Enqueue((f, firstNormal));
+            var faceKeyToIndex = new Dictionary<string, int>();
+            var discoveredFaces = new List<List<int>>();
+            var cellFacesList = new List<List<int>>();
 
+            List<int> AddCellFaces(List<int> cell, double[] cellNormal)
+            {
+                var faceIndices = new List<int>();
+                foreach (var f in FindMaximalFacets(points, cell, 3, eps))
+                {
+                    var key = GetKey(f);
+                    if (!faceKeyToIndex.TryGetValue(key, out int fi))
+                    {
+                        fi = discoveredFaces.Count;
+                        faceKeyToIndex[key] = fi;
+                        discoveredFaces.Add(f);
+                        ridgeQueue.Enqueue((f, cellNormal));
+                    }
+                    faceIndices.Add(fi);
+                }
+                return faceIndices;
+            }
+
+            cellFacesList.Add(AddCellFaces(firstCell, firstNormal));
             var cellKeys = new HashSet<string> { GetKey(firstCell) };
-            var ridgeKeys = new HashSet<string>(ridgeQueue.Select(r => GetKey(r.ridge)));
-            var discoveredFaces = ridgeQueue.Select(r => r.ridge).ToList();
 
             int ridgesDone = 0;
             var failedRidges = new List<(List<int> ridge, double[] prevNormal)>();
@@ -92,8 +113,7 @@ namespace D4BB.Geometry
                     discoveredCells.Add(nextCell);
                     discoveredNormals.Add(nextNormal);
                     onCellDiscovered?.Invoke(discoveredCells.Count);
-                    foreach (var subFacet in FindMaximalFacets(points, nextCell, 3, eps))
-                        if (ridgeKeys.Add(GetKey(subFacet))) { discoveredFaces.Add(subFacet); ridgeQueue.Enqueue((subFacet, nextNormal)); }
+                    cellFacesList.Add(AddCellFaces(nextCell, nextNormal));
                 }
             }
 
@@ -104,7 +124,12 @@ namespace D4BB.Geometry
                 var rn = Pivot(points, fr, fpn, centroid, eps, overrideThetaEps: 1e-15);
                 if (rn == null) continue;
                 var rc = GetSupportFace(points, rn, eps);
-                if (cellKeys.Add(GetKey(rc))) { discoveredCells.Add(rc); discoveredNormals.Add(rn); }
+                if (cellKeys.Add(GetKey(rc)))
+                {
+                    discoveredCells.Add(rc);
+                    discoveredNormals.Add(rn);
+                    cellFacesList.Add(AddCellFaces(rc, rn));
+                }
             }
 
             var edgeSet = new HashSet<string>();
@@ -115,6 +140,7 @@ namespace D4BB.Geometry
             hull.Cells = discoveredCells.Select(c => c.ToArray()).ToList();
             hull.Faces = discoveredFaces.Select(f => f.ToArray()).ToList();
             hull.Normals = discoveredNormals;
+            hull.CellFaces = cellFacesList.Select(l => { l.Sort(); return l.ToArray(); }).ToList();
             return hull;
         }
 

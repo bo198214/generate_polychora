@@ -132,6 +132,11 @@ namespace D4BB.Geometry
             foreach (var c in hull.Cells) { writer.WriteStartArray(); foreach (var i in c) writer.WriteNumberValue(i); writer.WriteEndArray(); }
             writer.WriteEndArray();
 
+            writer.WritePropertyName("cell_faces");
+            writer.WriteStartArray();
+            foreach (var cf in hull.CellFaces) { writer.WriteStartArray(); foreach (var i in cf) writer.WriteNumberValue(i); writer.WriteEndArray(); }
+            writer.WriteEndArray();
+
             writer.WritePropertyName("normals");
             writer.WriteStartArray();
             foreach (var n in hull.Normals) { writer.WriteStartArray(); foreach (var x in n) writer.WriteNumberValue(Math.Round(x, 8)); writer.WriteEndArray(); }
