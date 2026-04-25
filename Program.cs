@@ -72,6 +72,7 @@ void RunVertexGeneration(string vertexDir)
         ("deca",   "A4", 6,  "Decachoron (bitruncated 5-cell)"),
         ("hap",    "A4", 5,  "Small rhombated pentachoron"),
         ("tap",    "A4", 7,  "Great rhombated pentachoron"),
+        ("spid",   "A4", 9,  "Runcinated 5-cell (spid)"),
         ("dappat", "A4", 11, "Prismatorhombated pentachoron"),
         ("tappy",  "A4", 15, "Great prismatodecachoron (omnitruncated 5-cell)"),
         // B4 family (tesseract / 16-cell symmetry)
@@ -101,17 +102,18 @@ void RunVertexGeneration(string vertexDir)
         ("hi",     "H4", 1,  "Hecatonicosachoron (120-cell)"),
         ("ex",     "H4", 8,  "Hexacosichoron (600-cell)"),
         ("rhi",    "H4", 2,  "Rectified 120-cell"),
+        ("thi",    "H4", 3,  "Truncated 120-cell (thi)"),
         ("tex",    "H4", 12, "Truncated 600-cell"),
         ("rex",    "H4", 4,  "Rectified 600-cell"),
-        ("xex",    "H4", 9,  "Cantellated 600-cell"),
+        ("sidpixhi","H4", 9,  "Runcinated 120-cell (sidpixhi)"),
         ("srahi",  "H4", 5,  "Cantellated 120-cell (srahi)"),
         ("xhi",    "H4", 6,  "Bitruncated 120-cell (xhi)"),
-        ("spex",   "H4", 10, "Runcitruncated 600-cell (spex)"),
-        ("tphi",   "H4", 7,  "Omnitruncated 120-cell variant (tphi)"),
-        ("tpi",    "H4", 11, "Omnitruncated 600-cell variant (tpi)"),
-        ("dex",    "H4", 13, "Runcicantitruncated 600-cell (dex)"),
-        ("dphi",   "H4", 14, "Runcicantitruncated 120-cell (dphi)"),
-        ("gishi",  "H4", 15, "Great disprismatohexacosihecatonicosachoron (gishi)"),
+        ("srix",   "H4", 10, "Cantellated 600-cell (srix)"),
+        ("grahi",  "H4", 7,  "Cantitruncated 120-cell (grahi)"),
+        ("prix",   "H4", 11, "Runcitruncated 120-cell (prix)"),
+        ("prahi",  "H4", 13, "Runcitruncated 600-cell (prahi)"),
+        ("grix",   "H4", 14, "Cantitruncated 600-cell (grix)"),
+        ("gidpixhi","H4",15, "Great disprismatohexacosihecatonicosachoron (gidpixhi)"),
     };
 
     int ok = 0;

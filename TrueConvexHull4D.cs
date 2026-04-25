@@ -79,12 +79,13 @@ namespace D4BB.Geometry
             var discoveredFaces = ridgeQueue.Select(r => r.ridge).ToList();
 
             int ridgesDone = 0;
+            var failedRidges = new List<(List<int> ridge, double[] prevNormal)>();
             while (ridgeQueue.Count > 0)
             {
                 var (ridge, prevNormal) = ridgeQueue.Dequeue();
                 onRidgeProcessed?.Invoke(++ridgesDone, ridgeQueue.Count);
                 var nextNormal = Pivot(points, ridge, prevNormal, centroid, eps);
-                if (nextNormal == null) continue;
+                if (nextNormal == null) { failedRidges.Add((ridge, prevNormal)); continue; }
                 var nextCell = GetSupportFace(points, nextNormal, eps);
                 if (cellKeys.Add(GetKey(nextCell)))
                 {
@@ -94,6 +95,16 @@ namespace D4BB.Geometry
                     foreach (var subFacet in FindMaximalFacets(points, nextCell, 3, eps))
                         if (ridgeKeys.Add(GetKey(subFacet))) { discoveredFaces.Add(subFacet); ridgeQueue.Enqueue((subFacet, nextNormal)); }
                 }
+            }
+
+            // Retry ridges where Pivot returned null using a tighter thetaEps guard.
+            // This recovers the rare cell whose dihedral angle is just below the normal threshold.
+            foreach (var (fr, fpn) in failedRidges)
+            {
+                var rn = Pivot(points, fr, fpn, centroid, eps, overrideThetaEps: 1e-15);
+                if (rn == null) continue;
+                var rc = GetSupportFace(points, rn, eps);
+                if (cellKeys.Add(GetKey(rc))) { discoveredCells.Add(rc); discoveredNormals.Add(rn); }
             }
 
             var edgeSet = new HashSet<string>();
@@ -161,15 +172,12 @@ namespace D4BB.Geometry
             return edges;
         }
 
-        static double[] Pivot(List<double[]> pts, List<int> ridge, double[] prevN, double[] centroid, double eps)
+        static double[] Pivot(List<double[]> pts, List<int> ridge, double[] prevN, double[] centroid, double eps,
+                              double overrideThetaEps = -1)
         {
-            // For large polytopes the minimum dihedral angle scales as ~1/√V.
-            // Shrink the "same-cell" guard proportionally so tiny-angle neighbours
-            // are not mistaken for the current cell.
-            // Shrink with V so nearly-flat dihedral angles (small θ) in large polytopes
-            // are not mistaken for the current cell (θ≈0). The floor 1e-14 stays safely
-            // above floating-point noise (~1e-15) for the "same cell" case.
-            double thetaEps = Math.Max(1e-14, 1e-9 / Math.Sqrt(pts.Count));
+            double thetaEps = overrideThetaEps >= 0
+                ? overrideThetaEps
+                : Math.Max(1e-14, 1e-9 / Math.Sqrt(pts.Count));
 
             var v0 = pts[ridge[0]];
             var e1 = Sub(pts[ridge[1]], v0);

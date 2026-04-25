@@ -35,12 +35,6 @@ namespace D4BB.GeometryTests
                 var key = (hull.Vertices.Count, hull.Edges.Count, hull.Faces.Count, hull.Cells.Count);
                 string match = byVEFC.TryGetValue(key, out var n) ? $" <-- {n} ✓" : "";
                 Console.WriteLine($"  hull ({key.Item1},{key.Item2},{key.Item3},{key.Item4}){match}");
-                if (match.Length > 0) {
-                    var json = JsonSerializer.Serialize(new { name=n, source=$"F4/{an}",
-                        vertices=pts }, new JsonSerializerOptions{WriteIndented=true});
-                    File.WriteAllText(Path.Combine(OutDir, $"{n}.json"), json);
-                    Console.WriteLine($"  Saved {n}.json");
-                }
             }
             Assert.Pass();
         }
@@ -62,12 +56,6 @@ namespace D4BB.GeometryTests
                 var key = (hull.Vertices.Count, hull.Edges.Count, hull.Faces.Count, hull.Cells.Count);
                 string match = byVEFC.TryGetValue(key, out var n) ? $" <-- {n} ✓" : "";
                 Console.WriteLine($"  hull ({key.Item1},{key.Item2},{key.Item3},{key.Item4}){match}");
-                if (match.Length > 0) {
-                    var json = JsonSerializer.Serialize(new { name=n, source=$"H4/{an}",
-                        vertices=pts }, new JsonSerializerOptions{WriteIndented=true});
-                    File.WriteAllText(Path.Combine(OutDir, $"{n}.json"), json);
-                    Console.WriteLine($"  Saved {n}.json");
-                }
             }
             Assert.Pass();
         }
