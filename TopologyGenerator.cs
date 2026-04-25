@@ -82,7 +82,9 @@ namespace D4BB.Geometry
 
         static void WriteTopology(string outPath, string name, string description, TrueConvexHull4D hull)
         {
-            using var stream = File.Create(outPath);
+            // Write to a temp file first; rename atomically to avoid corrupt partials on abort.
+            var tmp = outPath + ".tmp";
+            using var stream = File.Create(tmp);
             using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
 
             writer.WriteStartObject();
@@ -145,6 +147,12 @@ namespace D4BB.Geometry
             writer.WriteEndArray();
 
             writer.WriteEndObject();
+            writer.Flush();
+            stream.Close();
+
+            // Atomic rename: only a completed file appears at the final path.
+            if (File.Exists(outPath)) File.Delete(outPath);
+            File.Move(tmp, outPath);
         }
     }
 }
