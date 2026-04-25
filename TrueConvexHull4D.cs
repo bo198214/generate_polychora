@@ -13,7 +13,9 @@ namespace D4BB.Geometry
         /// <summary>Outward unit normals, one per cell (parallel to Cells list).</summary>
         public List<double[]> Normals = new List<double[]>();
 
-        public static TrueConvexHull4D Compute(List<double[]> points, double eps = 1e-7)
+        public static TrueConvexHull4D Compute(List<double[]> points, double eps = 1e-7,
+                                               Action<int> onCellDiscovered = null,
+                                               Action<int, int> onRidgeProcessed = null)
         {
             var hull = new TrueConvexHull4D { Vertices = points };
             if (points.Count < 5) return hull;
@@ -26,8 +28,48 @@ namespace D4BB.Geometry
             var discoveredNormals = new List<double[]>();
             var firstNormal = FindInitialNormal(points, centroid, eps);
             var firstCell = GetSupportFace(points, firstNormal, eps);
+
+            // If the initial supporting hyperplane only touches 1-3 vertices it is
+            // too degenerate to seed the gift-wrapping.  Rebuild a proper 4-vertex
+            // simplex around the extreme vertex via Gram-Schmidt and re-derive the normal.
+            // If the initial cell is too small to seed the algorithm, search for a
+            // proper face normal via all triplets among the K nearest neighbours of
+            // the extreme vertex.  O(K^3 · V) — fast for any V with K=30.
+            if (firstCell.Count < 4)
+            {
+                int p0idx = firstCell.Count > 0 ? firstCell[0] : 0;
+                int K = Math.Min(50, points.Count - 1);
+                var nearby = Enumerable.Range(0, points.Count)
+                    .Where(i => i != p0idx)
+                    .OrderBy(i => { double s=0; for(int k=0;k<4;k++){double dx=points[i][k]-points[p0idx][k]; s+=dx*dx;} return s; })
+                    .Take(K).ToList();
+
+                // Use a tighter eps so near-degenerate hyperplanes don't pass IsExtreme.
+                double searchEps = Math.Max(eps / 100.0, 1e-9);
+                bool found = false;
+                var p0dir = Normalize(Sub(points[p0idx], centroid)); // for potential future sorting
+                for (int a = 0; a < nearby.Count && !found; a++)
+                for (int b = a+1; b < nearby.Count && !found; b++)
+                for (int c = b+1; c < nearby.Count && !found; c++)
+                {
+                    var raw = Cross4DRaw(Sub(points[nearby[a]], points[p0idx]),
+                                        Sub(points[nearby[b]], points[p0idx]),
+                                        Sub(points[nearby[c]], points[p0idx]));
+                    if (Mag(raw) < 1e-10) continue;
+                    var n = Normalize(raw);
+                    double d = Dot(points[p0idx], n);
+                    if (Dot(centroid, n) > d) { n = Scale(n, -1); d = -d; }
+                    if (!IsExtreme(points, n, d, searchEps)) continue;
+                    // Use GetSupportFace with eps (normal eps) so the cell is consistent
+                    // with the rest of the algorithm which also uses eps.
+                    var cand = GetSupportFace(points, n, eps);
+                    if (cand.Count >= 4) { firstNormal = n; firstCell = cand; found = true; }
+                }
+            }
+
             discoveredCells.Add(firstCell);
             discoveredNormals.Add(firstNormal);
+            onCellDiscovered?.Invoke(1);   // signal: initialisation done, ridge loop starting
 
             var ridgeQueue = new Queue<(List<int> ridge, double[] currentNormal)>();
             foreach (var f in FindMaximalFacets(points, firstCell, 3, eps)) ridgeQueue.Enqueue((f, firstNormal));
@@ -36,9 +78,11 @@ namespace D4BB.Geometry
             var ridgeKeys = new HashSet<string>(ridgeQueue.Select(r => GetKey(r.ridge)));
             var discoveredFaces = ridgeQueue.Select(r => r.ridge).ToList();
 
+            int ridgesDone = 0;
             while (ridgeQueue.Count > 0)
             {
                 var (ridge, prevNormal) = ridgeQueue.Dequeue();
+                onRidgeProcessed?.Invoke(++ridgesDone, ridgeQueue.Count);
                 var nextNormal = Pivot(points, ridge, prevNormal, centroid, eps);
                 if (nextNormal == null) continue;
                 var nextCell = GetSupportFace(points, nextNormal, eps);
@@ -46,6 +90,7 @@ namespace D4BB.Geometry
                 {
                     discoveredCells.Add(nextCell);
                     discoveredNormals.Add(nextNormal);
+                    onCellDiscovered?.Invoke(discoveredCells.Count);
                     foreach (var subFacet in FindMaximalFacets(points, nextCell, 3, eps))
                         if (ridgeKeys.Add(GetKey(subFacet))) { discoveredFaces.Add(subFacet); ridgeQueue.Enqueue((subFacet, nextNormal)); }
                 }
@@ -118,6 +163,11 @@ namespace D4BB.Geometry
 
         static double[] Pivot(List<double[]> pts, List<int> ridge, double[] prevN, double[] centroid, double eps)
         {
+            // For large polytopes the minimum dihedral angle scales as ~1/√V.
+            // Shrink the "same-cell" guard proportionally so tiny-angle neighbours
+            // are not mistaken for the current cell.
+            double thetaEps = Math.Max(1e-14, 1e-9 / Math.Sqrt(pts.Count));
+
             var v0 = pts[ridge[0]];
             var e1 = Sub(pts[ridge[1]], v0);
             var e2 = Sub(pts[ridge[2]], v0);
@@ -150,8 +200,8 @@ namespace D4BB.Geometry
                 double cosT = Dot(n, prevN);
                 double sinT = p2 != null ? -Dot(n, p2) : 0;  // negative = correct CCW direction
                 double theta = Math.Atan2(sinT, cosT);
-                if (theta <= 1e-9) theta += 2 * Math.PI;
-                if (theta > 2 * Math.PI - 1e-9) continue;
+                if (theta <= thetaEps) theta += 2 * Math.PI;
+                if (theta > 2 * Math.PI - thetaEps) continue;
                 if (theta < minTheta) { minTheta = theta; bestN = n; }
             }
             // Verify the best candidate is actually a supporting hyperplane (numerical safety net).
@@ -176,11 +226,10 @@ namespace D4BB.Geometry
         {
             int p0 = 0; for (int i = 1; i < pts.Count; i++) if (pts[i][0] < pts[p0][0]) p0 = i;
 
-            // Greedy simplex: pick 3 points that maximally span the space around p0 via
-            // Gram-Schmidt, then check if the resulting hyperplane is extreme. O(n) per step.
+            // Greedy simplex (O(V) per step): the original approach, correct for all sizes.
             var basis = new List<double[]>();
             var chosen = new List<int> { p0 };
-            for (int step = 0; step < 3 && chosen.Count <= pts.Count; step++) {
+            for (int step = 0; step < 3; step++) {
                 double maxDist = 0; int best = -1;
                 for (int i = 0; i < pts.Count; i++) {
                     if (chosen.Contains(i)) continue;
@@ -192,11 +241,12 @@ namespace D4BB.Geometry
                 if (best < 0 || maxDist < 1e-9) break;
                 var nb = Sub(pts[best], pts[p0]);
                 foreach (var b in basis) nb = Sub(nb, Scale(b, Dot(nb, b)));
-                basis.Add(Normalize(nb));
-                chosen.Add(best);
+                basis.Add(Normalize(nb)); chosen.Add(best);
             }
             if (chosen.Count == 4) {
-                var raw = Cross4DRaw(Sub(pts[chosen[1]], pts[p0]), Sub(pts[chosen[2]], pts[p0]), Sub(pts[chosen[3]], pts[p0]));
+                var raw = Cross4DRaw(Sub(pts[chosen[1]], pts[p0]),
+                                    Sub(pts[chosen[2]], pts[p0]),
+                                    Sub(pts[chosen[3]], pts[p0]));
                 if (Mag(raw) > 1e-10) {
                     var n = Normalize(raw);
                     double d = Dot(pts[p0], n);
@@ -205,17 +255,23 @@ namespace D4BB.Geometry
                 }
             }
 
-            // Fallback: exhaustive triple search (needed only for degenerate/unlucky cases).
-            for (int i = 0; i < pts.Count; i++)
-            for (int j = i+1; j < pts.Count; j++)
-            for (int k = j+1; k < pts.Count; k++)
-            {
-                var raw = Cross4DRaw(Sub(pts[i], pts[p0]), Sub(pts[j], pts[p0]), Sub(pts[k], pts[p0]));
-                if (Mag(raw) < 1e-10) continue;
-                var n = Normalize(raw);
-                double d = Dot(pts[p0], n);
-                if (Dot(centroid, n) > d) { n = Scale(n, -1); d = -d; }
-                if (IsExtreme(pts, n, d, eps)) return n;
+            // Fallback for large near-spherical polytopes where the greedy simplex
+            // hyperplane cuts through the interior: use normalize(p0−centroid) which
+            // is always outward and typically extreme for symmetric polytopes.  O(V).
+            for (int i = 0; i < pts.Count; i++) {
+                double dist = 0;
+                for (int k = 0; k < 4; k++) { double dx = pts[i][k]-centroid[k]; dist += dx*dx; }
+                if (dist > 0) { double d0 = 0; for (int k=0;k<4;k++) d0+=(pts[p0][k]-centroid[k])*(pts[p0][k]-centroid[k]); if (dist > d0) p0 = i; }
+            }
+            { var n = Normalize(Sub(pts[p0], centroid));
+              double d = Dot(pts[p0], n);
+              if (IsExtreme(pts, n, d, eps)) return n; }
+
+            // Last resort: axis-aligned directions (always valid supporting hyperplanes).
+            for (int ax = 0; ax < 4; ax++) for (int sg = -1; sg <= 1; sg += 2) {
+                var na = new double[4]; na[ax] = sg;
+                double da = pts.Max(p => Dot(p, na));
+                if (IsExtreme(pts, na, da, eps)) return na;
             }
             return new[] { 1.0, 0, 0, 0 };
         }
@@ -249,6 +305,15 @@ namespace D4BB.Geometry
                 for (int j = 0; j < f; j++) v = Sub(v, Scale(b[j], Dot(v, b[j])));
                 if (Mag(v) > 1e-9) b[f++] = Normalize(v);
             }
+            // Fill remaining slots with axis vectors so b never contains null.
+            // Degenerate cells (dim < actual span) will project all points onto the
+            // same subplane → IsExtreme will find no faces, which is correct behaviour.
+            for (; f < dim; f++)
+                for (int ax = 0; ax < 4; ax++) {
+                    var c = new double[4]; c[ax] = 1.0;
+                    for (int j = 0; j < f; j++) c = Sub(c, Scale(b[j], Dot(c, b[j])));
+                    if (Mag(c) > 1e-9) { b[f] = Normalize(c); break; }
+                }
             return b;
         }
         static double[] Project(double[] p, double[][] b) { var r = new double[b.Length]; for (int i = 0; i < b.Length; i++) r[i] = Dot(p, b[i]); return r; }

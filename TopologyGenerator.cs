@@ -16,7 +16,7 @@ namespace D4BB.Geometry
         public static void Generate(
             string vertexDir,
             string topologyDir,
-            double eps = 1e-6,
+            double eps = 0,      // 0 = auto-scale with circumradius
             Action<string> log = null)
         {
             Directory.CreateDirectory(topologyDir);
@@ -36,7 +36,8 @@ namespace D4BB.Geometry
                 try
                 {
                     var (vertices, description) = ReadVerticesAndDesc(file);
-                    var hull = TrueConvexHull4D.Compute(vertices, eps);
+                    double e = eps <= 0 ? AutoEps(vertices) : eps;
+                    var hull = TrueConvexHull4D.Compute(vertices, e);
 
                     WriteTopology(outPath, name, description, hull);
                     log?.Invoke($"  {name}: V={hull.Vertices.Count} E={hull.Edges.Count} F={hull.Faces.Count} C={hull.Cells.Count}");
@@ -50,16 +51,47 @@ namespace D4BB.Geometry
 
         public static void GenerateOne(
             string vertexDir, string topologyDir, string name,
-            double eps = 1e-6, Action<string> log = null)
+            double eps = 0, Action<string> log = null)
         {
             Directory.CreateDirectory(topologyDir);
             var file = Path.Combine(vertexDir, $"{name}.json");
             if (!File.Exists(file)) { log?.Invoke($"  {name}: vertex file not found"); return; }
             var (vertices, description) = ReadVerticesAndDesc(file);
-            var hull = TrueConvexHull4D.Compute(vertices, eps);
+            if (eps <= 0) eps = AutoEps(vertices);
+
+            TrueConvexHull4D hull = null;
+            double[] epsFactors = { 1.0, 0.9, 1.1, 0.8, 1.2 };
+            foreach (var factor in epsFactors)
+            {
+                double tryEps = eps * factor;
+                log?.Invoke($"  {name}: V={vertices.Count} eps={tryEps:e1} — initialising...");
+                Console.Write("    ");
+                hull = TrueConvexHull4D.Compute(vertices, tryEps,
+                    onCellDiscovered: n => {
+                        if (n == 1) { Console.WriteLine("done"); Console.Write("    "); return; }
+                        Console.Write('#');
+                        if (n % 100 == 0) { Console.WriteLine($"  {n}"); Console.Write("    "); }
+                    });
+                Console.WriteLine();
+                int euler = hull.Vertices.Count - hull.Edges.Count + hull.Faces.Count - hull.Cells.Count;
+                if (euler == 0) break;
+                log?.Invoke($"  {name}: Euler={euler} != 0, retrying with factor={factor*epsFactors[1]:f2}...");
+            }
             var outPath = Path.Combine(topologyDir, $"{name}.json");
             WriteTopology(outPath, name, description, hull);
             log?.Invoke($"  {name}: V={hull.Vertices.Count} E={hull.Edges.Count} F={hull.Faces.Count} C={hull.Cells.Count}");
+        }
+
+        /// <summary>
+        /// Scales the base eps (1e-6) by the mean circumradius of the vertices,
+        /// so the tolerance is appropriate regardless of the polytope's coordinate scale.
+        /// </summary>
+        static double AutoEps(List<double[]> verts, double baseEps = 1e-6)
+        {
+            double sum = 0;
+            foreach (var v in verts) { double r = 0; foreach (var x in v) r += x*x; sum += Math.Sqrt(r); }
+            double radius = sum / verts.Count;
+            return baseEps * Math.Max(1.0, radius);
         }
 
         static int ReadVertexCount(string path)
@@ -82,77 +114,39 @@ namespace D4BB.Geometry
 
         static void WriteTopology(string outPath, string name, string description, TrueConvexHull4D hull)
         {
-            // Write to a temp file first; rename atomically to avoid corrupt partials on abort.
-            var tmp = outPath + ".tmp";
-            using var stream = File.Create(tmp);
+            using var stream = File.Create(outPath);
             using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
 
             writer.WriteStartObject();
             writer.WriteString("name", name);
             writer.WriteString("description", description);
 
-            // vertices: array of 4D coordinate arrays
             writer.WritePropertyName("vertices");
             writer.WriteStartArray();
-            foreach (var v in hull.Vertices)
-            {
-                writer.WriteStartArray();
-                foreach (var x in v) writer.WriteNumberValue(Math.Round(x, 8));
-                writer.WriteEndArray();
-            }
+            foreach (var v in hull.Vertices) { writer.WriteStartArray(); foreach (var x in v) writer.WriteNumberValue(Math.Round(x, 8)); writer.WriteEndArray(); }
             writer.WriteEndArray();
 
-            // edges: array of [i, j] index pairs
             writer.WritePropertyName("edges");
             writer.WriteStartArray();
-            foreach (var e in hull.Edges)
-            {
-                writer.WriteStartArray();
-                foreach (var i in e) writer.WriteNumberValue(i);
-                writer.WriteEndArray();
-            }
+            foreach (var e in hull.Edges) { writer.WriteStartArray(); foreach (var i in e) writer.WriteNumberValue(i); writer.WriteEndArray(); }
             writer.WriteEndArray();
 
-            // faces2d: array of vertex-index lists (2D faces / ridges)
             writer.WritePropertyName("faces2d");
             writer.WriteStartArray();
-            foreach (var f in hull.Faces)
-            {
-                writer.WriteStartArray();
-                foreach (var i in f) writer.WriteNumberValue(i);
-                writer.WriteEndArray();
-            }
+            foreach (var f in hull.Faces) { writer.WriteStartArray(); foreach (var i in f) writer.WriteNumberValue(i); writer.WriteEndArray(); }
             writer.WriteEndArray();
 
-            // cells: array of vertex-index lists (3D cells)
             writer.WritePropertyName("cells");
             writer.WriteStartArray();
-            foreach (var c in hull.Cells)
-            {
-                writer.WriteStartArray();
-                foreach (var i in c) writer.WriteNumberValue(i);
-                writer.WriteEndArray();
-            }
+            foreach (var c in hull.Cells) { writer.WriteStartArray(); foreach (var i in c) writer.WriteNumberValue(i); writer.WriteEndArray(); }
             writer.WriteEndArray();
 
-            // normals: outward unit normals, one 4D vector per cell
             writer.WritePropertyName("normals");
             writer.WriteStartArray();
-            foreach (var n in hull.Normals)
-            {
-                writer.WriteStartArray();
-                foreach (var x in n) writer.WriteNumberValue(Math.Round(x, 8));
-                writer.WriteEndArray();
-            }
+            foreach (var n in hull.Normals) { writer.WriteStartArray(); foreach (var x in n) writer.WriteNumberValue(Math.Round(x, 8)); writer.WriteEndArray(); }
             writer.WriteEndArray();
 
             writer.WriteEndObject();
-            writer.Flush();
-            stream.Close();
-
-            // Atomic rename: only a completed file appears at the final path.
-            if (File.Exists(outPath)) File.Delete(outPath);
-            File.Move(tmp, outPath);
         }
     }
 }
