@@ -59,24 +59,15 @@ namespace D4BB.Geometry
             var (vertices, description) = ReadVerticesAndDesc(file);
             if (eps <= 0) eps = AutoEps(vertices);
 
-            TrueConvexHull4D hull = null;
-            double[] epsFactors = { 1.0, 0.9, 1.1, 0.8, 1.2 };
-            foreach (var factor in epsFactors)
-            {
-                double tryEps = eps * factor;
-                log?.Invoke($"  {name}: V={vertices.Count} eps={tryEps:e1} — initialising...");
-                Console.Write("    ");
-                hull = TrueConvexHull4D.Compute(vertices, tryEps,
-                    onCellDiscovered: n => {
-                        if (n == 1) { Console.WriteLine("done"); Console.Write("    "); return; }
-                        Console.Write('#');
-                        if (n % 100 == 0) { Console.WriteLine($"  {n}"); Console.Write("    "); }
-                    });
-                Console.WriteLine();
-                int euler = hull.Vertices.Count - hull.Edges.Count + hull.Faces.Count - hull.Cells.Count;
-                if (euler == 0) break;
-                log?.Invoke($"  {name}: Euler={euler} != 0, retrying with factor={factor*epsFactors[1]:f2}...");
-            }
+            log?.Invoke($"  {name}: V={vertices.Count} eps={eps:e1} — initialising...");
+            Console.Write("    ");
+            var hull = TrueConvexHull4D.Compute(vertices, eps,
+                onCellDiscovered: n => {
+                    if (n == 1) { Console.WriteLine("done"); Console.Write("    "); return; }
+                    Console.Write('#');
+                    if (n % 100 == 0) { Console.WriteLine($"  {n}"); Console.Write("    "); }
+                });
+            Console.WriteLine();
             var outPath = Path.Combine(topologyDir, $"{name}.json");
             WriteTopology(outPath, name, description, hull);
             log?.Invoke($"  {name}: V={hull.Vertices.Count} E={hull.Edges.Count} F={hull.Faces.Count} C={hull.Cells.Count}");

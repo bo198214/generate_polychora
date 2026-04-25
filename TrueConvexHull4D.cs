@@ -33,8 +33,8 @@ namespace D4BB.Geometry
             // too degenerate to seed the gift-wrapping.  Rebuild a proper 4-vertex
             // simplex around the extreme vertex via Gram-Schmidt and re-derive the normal.
             // If the initial cell is too small to seed the algorithm, search for a
-            // proper face normal via all triplets among the K nearest neighbours of
-            // the extreme vertex.  O(K^3 · V) — fast for any V with K=30.
+            // If the initial cell is too small, find a proper face normal via all
+            // triplets among the K nearest neighbours.  O(K³ · V).
             if (firstCell.Count < 4)
             {
                 int p0idx = firstCell.Count > 0 ? firstCell[0] : 0;
@@ -166,6 +166,9 @@ namespace D4BB.Geometry
             // For large polytopes the minimum dihedral angle scales as ~1/√V.
             // Shrink the "same-cell" guard proportionally so tiny-angle neighbours
             // are not mistaken for the current cell.
+            // Shrink with V so nearly-flat dihedral angles (small θ) in large polytopes
+            // are not mistaken for the current cell (θ≈0). The floor 1e-14 stays safely
+            // above floating-point noise (~1e-15) for the "same cell" case.
             double thetaEps = Math.Max(1e-14, 1e-9 / Math.Sqrt(pts.Count));
 
             var v0 = pts[ridge[0]];
