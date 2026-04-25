@@ -18,9 +18,13 @@ namespace D4BB.Geometry
             var hull = new TrueConvexHull4D { Vertices = points };
             if (points.Count < 5) return hull;
 
+            // Centroid computed once — enables O(1) normal orientation in Pivot.
+            var centroid = new double[4];
+            foreach (var p in points) for (int c = 0; c < 4; c++) centroid[c] += p[c] / points.Count;
+
             var discoveredCells = new List<List<int>>();
             var discoveredNormals = new List<double[]>();
-            var firstNormal = FindInitialNormal(points, eps);
+            var firstNormal = FindInitialNormal(points, centroid, eps);
             var firstCell = GetSupportFace(points, firstNormal, eps);
             discoveredCells.Add(firstCell);
             discoveredNormals.Add(firstNormal);
@@ -35,7 +39,7 @@ namespace D4BB.Geometry
             while (ridgeQueue.Count > 0)
             {
                 var (ridge, prevNormal) = ridgeQueue.Dequeue();
-                var nextNormal = Pivot(points, ridge, prevNormal, eps);
+                var nextNormal = Pivot(points, ridge, prevNormal, centroid, eps);
                 if (nextNormal == null) continue;
                 var nextCell = GetSupportFace(points, nextNormal, eps);
                 if (cellKeys.Add(GetKey(nextCell)))
@@ -112,7 +116,7 @@ namespace D4BB.Geometry
             return edges;
         }
 
-        static double[] Pivot(List<double[]> pts, List<int> ridge, double[] prevN, double eps)
+        static double[] Pivot(List<double[]> pts, List<int> ridge, double[] prevN, double[] centroid, double eps)
         {
             var v0 = pts[ridge[0]];
             var e1 = Sub(pts[ridge[1]], v0);
@@ -123,11 +127,12 @@ namespace D4BB.Geometry
             var p2raw = Cross4DRaw(e1, e2, prevN);
             var p2 = Mag(p2raw) > 1e-9 ? Normalize(p2raw) : null;
 
+            var ridgeSet = new HashSet<int>(ridge);
             double minTheta = double.MaxValue;
             double[] bestN = null;
             for (int i = 0; i < pts.Count; i++)
             {
-                if (ridge.Contains(i)) continue;
+                if (ridgeSet.Contains(i)) continue;
                 var raw = Cross4DRaw(e1, e2, Sub(pts[i], v0));
                 if (Mag(raw) < 1e-10) continue;
                 var n = Normalize(raw);
@@ -138,11 +143,8 @@ namespace D4BB.Geometry
                     if (Math.Abs(Dot(n, pts[ridge[r]]) - d) > eps) { ridgeOnPlane = false; break; }
                 }
                 if (!ridgeOnPlane) continue;
-                // Orient n outward: first non-plane point must be on negative side
-                for (int l = 0; l < pts.Count; l++) {
-                    double v = Dot(n, pts[l]) - d;
-                    if (Math.Abs(v) > eps) { if (v > 0) { n = Scale(n, -1); d = -d; } break; }
-                }
+                // O(1) orientation: centroid must lie on the negative side.
+                if (Dot(n, centroid) - d > 0) n = Scale(n, -1);
                 // Signed rotation angle from prevN to n in the (prevN, p2) plane.
                 // Maps to (0, 2π]: skip zero (same cell) and pick smallest positive angle.
                 double cosT = Dot(n, prevN);
@@ -150,9 +152,12 @@ namespace D4BB.Geometry
                 double theta = Math.Atan2(sinT, cosT);
                 if (theta <= 1e-9) theta += 2 * Math.PI;
                 if (theta > 2 * Math.PI - 1e-9) continue;
-                if (IsExtreme(pts, n, d, eps)) {
-                    if (theta < minTheta) { minTheta = theta; bestN = n; }
-                }
+                if (theta < minTheta) { minTheta = theta; bestN = n; }
+            }
+            // Verify the best candidate is actually a supporting hyperplane (numerical safety net).
+            if (bestN != null) {
+                double d = Dot(bestN, v0);
+                if (!IsExtreme(pts, bestN, d, eps)) bestN = null;
             }
             return bestN;
         }
@@ -167,11 +172,40 @@ namespace D4BB.Geometry
             return true;
         }
 
-        static double[] FindInitialNormal(List<double[]> pts, double eps)
+        static double[] FindInitialNormal(List<double[]> pts, double[] centroid, double eps)
         {
             int p0 = 0; for (int i = 1; i < pts.Count; i++) if (pts[i][0] < pts[p0][0]) p0 = i;
-            var centroid = new double[4];
-            foreach (var p in pts) for (int c = 0; c < 4; c++) centroid[c] += p[c] / pts.Count;
+
+            // Greedy simplex: pick 3 points that maximally span the space around p0 via
+            // Gram-Schmidt, then check if the resulting hyperplane is extreme. O(n) per step.
+            var basis = new List<double[]>();
+            var chosen = new List<int> { p0 };
+            for (int step = 0; step < 3 && chosen.Count <= pts.Count; step++) {
+                double maxDist = 0; int best = -1;
+                for (int i = 0; i < pts.Count; i++) {
+                    if (chosen.Contains(i)) continue;
+                    var v = Sub(pts[i], pts[p0]);
+                    foreach (var b in basis) v = Sub(v, Scale(b, Dot(v, b)));
+                    double d = Mag(v);
+                    if (d > maxDist) { maxDist = d; best = i; }
+                }
+                if (best < 0 || maxDist < 1e-9) break;
+                var nb = Sub(pts[best], pts[p0]);
+                foreach (var b in basis) nb = Sub(nb, Scale(b, Dot(nb, b)));
+                basis.Add(Normalize(nb));
+                chosen.Add(best);
+            }
+            if (chosen.Count == 4) {
+                var raw = Cross4DRaw(Sub(pts[chosen[1]], pts[p0]), Sub(pts[chosen[2]], pts[p0]), Sub(pts[chosen[3]], pts[p0]));
+                if (Mag(raw) > 1e-10) {
+                    var n = Normalize(raw);
+                    double d = Dot(pts[p0], n);
+                    if (Dot(centroid, n) > d) { n = Scale(n, -1); d = -d; }
+                    if (IsExtreme(pts, n, d, eps)) return n;
+                }
+            }
+
+            // Fallback: exhaustive triple search (needed only for degenerate/unlucky cases).
             for (int i = 0; i < pts.Count; i++)
             for (int j = i+1; j < pts.Count; j++)
             for (int k = j+1; k < pts.Count; k++)
@@ -180,7 +214,6 @@ namespace D4BB.Geometry
                 if (Mag(raw) < 1e-10) continue;
                 var n = Normalize(raw);
                 double d = Dot(pts[p0], n);
-                // Orient n outward: centroid must be on negative side
                 if (Dot(centroid, n) > d) { n = Scale(n, -1); d = -d; }
                 if (IsExtreme(pts, n, d, eps)) return n;
             }
