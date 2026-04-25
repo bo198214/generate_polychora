@@ -1,8 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using D4BB.Geometry;
+
+// Always use en-US so decimal points are '.' regardless of system locale.
+CultureInfo.DefaultThreadCurrentCulture   = CultureInfo.GetCultureInfo("en-US");
+CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo("en-US");
+
+// Replace Console.Out with an auto-flushing writer so progress dots appear
+// immediately even when stdout is piped through PowerShell.
+Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), leaveOpen: true) { AutoFlush = true });
 
 // Usage:
 //   dotnet run -- vertices          → regenerate all vertex JSONs in vertex_output/
@@ -37,7 +46,7 @@ switch (cmd)
         break;
     case "topology-one" when args.Length >= 2:
         // Generate topology for a single polytope by name (used by Makefile)
-        TopologyGenerator.GenerateOne(vertexDir, topologyDir, args[1], eps: 1e-6,
+        TopologyGenerator.GenerateOne(vertexDir, topologyDir, args[1], eps: 0,  // 0 = auto-scale with circumradius
             log: msg => Console.WriteLine(msg));
         break;
     default:
@@ -94,6 +103,15 @@ void RunVertexGeneration(string vertexDir)
         ("rhi",    "H4", 2,  "Rectified 120-cell"),
         ("tex",    "H4", 12, "Truncated 600-cell"),
         ("rex",    "H4", 4,  "Rectified 600-cell"),
+        ("xex",    "H4", 9,  "Cantellated 600-cell"),
+        ("xhi",    "H4", 5,  "Bitruncated 120-cell (xhi)"),
+        ("sphi",   "H4", 6,  "Cantitruncated 120-cell (sphi)"),
+        ("spex",   "H4", 10, "Runcitruncated 600-cell (spex)"),
+        ("tphi",   "H4", 7,  "Omnitruncated 120-cell variant (tphi)"),
+        ("tpi",    "H4", 11, "Omnitruncated 600-cell variant (tpi)"),
+        ("dex",    "H4", 13, "Runcicantitruncated 600-cell (dex)"),
+        ("dphi",   "H4", 14, "Runcicantitruncated 120-cell (dphi)"),
+        ("gishi",  "H4", 15, "Great disprismatohexacosihecatonicosachoron (gishi)"),
     };
 
     int ok = 0;
@@ -128,7 +146,7 @@ void WriteNonWythoffian(string dir, string name, string description, string sour
 void RunTopologyGeneration(string vertexDir, string topologyDir)
 {
     Console.WriteLine($"Computing topology → {topologyDir}");
-    TopologyGenerator.Generate(vertexDir, topologyDir, eps: 1e-6,
+    TopologyGenerator.Generate(vertexDir, topologyDir, eps: 0,  // 0 = auto-scale with circumradius
         log: msg => Console.WriteLine(msg));
     Console.WriteLine("Done.\n");
 }
