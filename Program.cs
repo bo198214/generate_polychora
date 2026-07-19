@@ -64,54 +64,56 @@ void RunVertexGeneration(string vertexDir)
     Directory.CreateDirectory(vertexDir);
 
     // (name, group, activeNodes, description)
+    // Names are the Bowers acronyms as listed on
+    // https://en.wikipedia.org/wiki/Uniform_4-polytope (aligned 2026-07-19).
     var mappings = new (string name, string grp, int an, string desc)[] {
         // A4 family (5-cell / pentachoron symmetry)
         ("pen",    "A4", 1,  "Pentachoron (5-cell)"),
         ("rap",    "A4", 2,  "Rectified pentachoron"),
         ("tip",    "A4", 3,  "Truncated pentachoron"),
         ("deca",   "A4", 6,  "Decachoron (bitruncated 5-cell)"),
-        ("hap",    "A4", 5,  "Small rhombated pentachoron"),
-        ("tap",    "A4", 7,  "Great rhombated pentachoron"),
+        ("srip",   "A4", 5,  "Cantellated 5-cell (small rhombated pentachoron)"),
+        ("grip",   "A4", 7,  "Cantitruncated 5-cell (great rhombated pentachoron)"),
         ("spid",   "A4", 9,  "Runcinated 5-cell (spid)"),
-        ("dappat", "A4", 11, "Prismatorhombated pentachoron"),
-        ("tappy",  "A4", 15, "Great prismatodecachoron (omnitruncated 5-cell)"),
+        ("prip",   "A4", 11, "Runcitruncated 5-cell (prismatorhombated pentachoron)"),
+        ("gippid", "A4", 15, "Omnitruncated 5-cell (great prismatodecachoron)"),
         // B4 family (tesseract / 16-cell symmetry)
         ("tes",    "B4", 1,  "Tesseract (8-cell)"),
         ("hex",    "B4", 8,  "Hexadecachoron (16-cell)"),
-        ("rico",   "B4", 2,  "Rectified tesseract"),
-        ("tah",    "B4", 3,  "Truncated tesseract"),
-        ("tico",   "B4", 12, "Truncated hexadecachoron (truncated 16-cell)"),
-        ("spic",   "B4", 10, "Rectified icositetrachoron (rectified 24-cell, B4 form)"),
-        ("thic",   "B4", 7,  "Cantitruncated tesseract"),
-        ("xic",    "B4", 9,  "Runcinated tesseract"),
-        ("scic",   "B4", 11, "Runcitruncated tesseract"),
-        ("gic",    "B4", 15, "Omnitruncated tesseract"),
+        ("rit",    "B4", 2,  "Rectified tesseract"),
+        ("tat",    "B4", 3,  "Truncated tesseract"),
+        ("thex",   "B4", 12, "Truncated 16-cell (truncated hexadecachoron)"),
+        ("rico",   "B4", 10, "Rectified 24-cell (rectified icositetrachoron)"),
+        ("grit",   "B4", 7,  "Cantitruncated tesseract (great rhombated tesseract)"),
+        ("sidpith","B4", 9,  "Runcinated tesseract (small disprismatotesseractihexadecachoron)"),
+        ("proh",   "B4", 11, "Runcitruncated tesseract (prismatorhombated hexadecachoron)"),
+        ("gidpith","B4", 15, "Omnitruncated tesseract (great disprismatotesseractihexadecachoron)"),
         ("srit",   "B4", 5,  "Cantellated tesseract (small rhombated tesseract)"),
-        ("prit",   "B4", 13, "Runcitruncated hexadecachoron"),
+        ("prit",   "B4", 13, "Runcitruncated 16-cell (prismatorhombated tesseract)"),
+        ("tah",    "B4", 6,  "Bitruncated tesseract"),
         // F4 family (24-cell / icositetrachoron symmetry)
         ("ico",    "F4", 1,  "Icositetrachoron (24-cell)"),
-        ("cont",   "F4", 3,  "Truncated icositetrachoron (truncated 24-cell)"),
-        ("tico_f", "B4", 6,  "Bitruncated tesseract"),
-        ("srico",  "F4", 6,  "Small rhombated icositetrachoron"),
-        ("frico",  "F4", 5,  "Cantellated 24-cell"),
+        ("tico",   "F4", 3,  "Truncated 24-cell (truncated icositetrachoron)"),
+        ("cont",   "F4", 6,  "Bitruncated 24-cell (tetracontoctachoron)"),
+        ("srico",  "F4", 5,  "Cantellated 24-cell (small rhombated icositetrachoron)"),
         ("grico",  "F4", 7,  "Cantitruncated 24-cell"),
-        ("prico",  "F4", 9,  "Prismatorhombated icositetrachoron"),
-        ("drico",  "F4", 11, "Runcitruncated icositetrachoron"),
-        ("trico",  "F4", 15, "Omnitruncated icositetrachoron"),
+        ("spic",   "F4", 9,  "Runcinated 24-cell (small prismatotetracontoctachoron)"),
+        ("prico",  "F4", 11, "Runcitruncated 24-cell (prismatorhombated icositetrachoron)"),
+        ("gippic", "F4", 15, "Omnitruncated 24-cell (great prismatotetracontoctachoron)"),
         // H4 family (120-cell / 600-cell symmetry)
         ("hi",     "H4", 1,  "Hecatonicosachoron (120-cell)"),
         ("ex",     "H4", 8,  "Hexacosichoron (600-cell)"),
-        ("rhi",    "H4", 2,  "Rectified 120-cell"),
+        ("rahi",   "H4", 2,  "Rectified 120-cell (rectified hecatonicosachoron)"),
         ("thi",    "H4", 3,  "Truncated 120-cell (thi)"),
         ("tex",    "H4", 12, "Truncated 600-cell"),
-        ("rex",    "H4", 4,  "Rectified 600-cell"),
+        ("rox",    "H4", 4,  "Rectified 600-cell (rectified hexacosichoron)"),
         ("sidpixhi","H4", 9,  "Runcinated 120-cell (sidpixhi)"),
         ("srahi",  "H4", 5,  "Cantellated 120-cell (srahi)"),
         ("xhi",    "H4", 6,  "Bitruncated 120-cell (xhi)"),
         ("srix",   "H4", 10, "Cantellated 600-cell (srix)"),
         ("grahi",  "H4", 7,  "Cantitruncated 120-cell (grahi)"),
         ("prix",   "H4", 11, "Runcitruncated 120-cell (prix)"),
-        ("prahi",  "H4", 13, "Runcitruncated 600-cell (prahi)"),
+        ("prahi",  "H4", 13, "Runcitruncated 600-cell (prismatorhombated hecatonicosachoron)"),
         ("grix",   "H4", 14, "Cantitruncated 600-cell (grix)"),
         ("gidpixhi","H4",15, "Great disprismatohexacosihecatonicosachoron (gidpixhi)"),
     };
@@ -129,7 +131,7 @@ void RunVertexGeneration(string vertexDir)
     }
 
     // Non-Wythoffian polytopes
-    WriteNonWythoffian(vertexDir, "snic", "Snub icositetrachoron (snub 24-cell)", "snub-24-cell",    SnubGenerator.SnubIcositetrachoron());
+    WriteNonWythoffian(vertexDir, "sadi", "Snub 24-cell (snub disicositetrachoron)", "snub-24-cell",    SnubGenerator.SnubIcositetrachoron());
     WriteNonWythoffian(vertexDir, "gap",  "Grand antiprism",                      "grand-antiprism", SnubGenerator.GrandAntiprism());
     ok += 2;
 

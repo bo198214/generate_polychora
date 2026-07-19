@@ -1,6 +1,6 @@
 {
-  "name": "snic",
-  "description": "Snub icositetrachoron (snub 24-cell)",
+  "name": "sadi",
+  "description": "Snub 24-cell (snub disicositetrachoron)",
   "source": "snub-24-cell",
   "vertices": [
     [
