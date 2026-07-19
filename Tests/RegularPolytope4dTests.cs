@@ -43,9 +43,6 @@ namespace D4BB.GeometryTests
         [TestCaseSource(nameof(All47))]
         public void TopologyFileVerification((string name, int v, int e, int f, int c) expected)
         {
-            if (expected.name == "prahi")
-                Assert.Ignore("prahi: numerically unstable at current eps, topology file not generated");
-
             var path = Path.Combine(TopoDir, $"{expected.name}.json");
             if (!File.Exists(path))
                 Assert.Ignore($"{expected.name}: topology_output/{expected.name}.json not yet generated (run 'make topology')");

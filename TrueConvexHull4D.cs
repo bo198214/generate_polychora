@@ -73,7 +73,13 @@ namespace D4BB.Geometry
             discoveredNormals.Add(firstNormal);
             onCellDiscovered?.Invoke(1);   // signal: initialisation done, ridge loop starting
 
-            var ridgeQueue = new Queue<(List<int> ridge, double[] currentNormal)>();
+            // Each queued ridge carries a reference point: a vertex of the discovering cell
+            // that is NOT on the ridge.  Pivot uses it to orient the sweep direction
+            // geometrically — the sign of cross4(e1,e2,prevN) depends on the arbitrary order
+            // of the ridge vertices, and an inverted sweep hides the true next cell at
+            // 2π−θ behind thousands of interior planes (this silently lost one prahi cell
+            // whose 8 inbound ridges all happened to be inverted).
+            var ridgeQueue = new Queue<(List<int> ridge, double[] currentNormal, double[] refPoint)>();
             var faceKeyToIndex = new Dictionary<string, int>();
             var discoveredFaces = new List<List<int>>();
             var cellFacesList = new List<List<int>>();
@@ -89,7 +95,9 @@ namespace D4BB.Geometry
                         fi = discoveredFaces.Count;
                         faceKeyToIndex[key] = fi;
                         discoveredFaces.Add(f);
-                        ridgeQueue.Enqueue((f, cellNormal));
+                        var fSet = new HashSet<int>(f);
+                        int refIdx = cell.First(v => !fSet.Contains(v));
+                        ridgeQueue.Enqueue((f, cellNormal, points[refIdx]));
                     }
                     faceIndices.Add(fi);
                 }
@@ -100,13 +108,13 @@ namespace D4BB.Geometry
             var cellKeys = new HashSet<string> { GetKey(firstCell) };
 
             int ridgesDone = 0;
-            var failedRidges = new List<(List<int> ridge, double[] prevNormal)>();
+            var failedRidges = new List<(List<int> ridge, double[] prevNormal, double[] refPoint)>();
             while (ridgeQueue.Count > 0)
             {
-                var (ridge, prevNormal) = ridgeQueue.Dequeue();
+                var (ridge, prevNormal, refPoint) = ridgeQueue.Dequeue();
                 onRidgeProcessed?.Invoke(++ridgesDone, ridgeQueue.Count);
-                var nextNormal = Pivot(points, ridge, prevNormal, centroid, eps);
-                if (nextNormal == null) { failedRidges.Add((ridge, prevNormal)); continue; }
+                var nextNormal = Pivot(points, ridge, prevNormal, refPoint, centroid, eps);
+                if (nextNormal == null) { failedRidges.Add((ridge, prevNormal, refPoint)); continue; }
                 var nextCell = GetSupportFace(points, nextNormal, eps);
                 if (cellKeys.Add(GetKey(nextCell)))
                 {
@@ -119,9 +127,9 @@ namespace D4BB.Geometry
 
             // Retry ridges where Pivot returned null using a tighter thetaEps guard.
             // This recovers the rare cell whose dihedral angle is just below the normal threshold.
-            foreach (var (fr, fpn) in failedRidges)
+            foreach (var (fr, fpn, frp) in failedRidges)
             {
-                var rn = Pivot(points, fr, fpn, centroid, eps, overrideThetaEps: 1e-15);
+                var rn = Pivot(points, fr, fpn, frp, centroid, eps, overrideThetaEps: 1e-15);
                 if (rn == null) continue;
                 var rc = GetSupportFace(points, rn, eps);
                 if (cellKeys.Add(GetKey(rc)))
@@ -141,6 +149,19 @@ namespace D4BB.Geometry
             hull.Faces = discoveredFaces.Select(f => f.ToArray()).ToList();
             hull.Normals = discoveredNormals;
             hull.CellFaces = cellFacesList.Select(l => { l.Sort(); return l.ToArray(); }).ToList();
+
+            // Fail fast: in a closed 4-polytope boundary every 2-face is shared by exactly
+            // two cells.  A dangling face means a cell was silently lost during ridge
+            // processing (this is how prahi shipped with 2639 of 2640 cells) — better to
+            // abort loudly than to write a subtly broken topology file.
+            var faceIncidence = new int[hull.Faces.Count];
+            foreach (var cf in hull.CellFaces)
+                foreach (var fi in cf) faceIncidence[fi]++;
+            int dangling = faceIncidence.Count(x => x != 2);
+            if (dangling > 0 && Environment.GetEnvironmentVariable("HULL_KEEP_BROKEN") != "1")
+                throw new InvalidOperationException(
+                    $"Convex hull incomplete: {dangling} of {hull.Faces.Count} faces are not shared " +
+                    $"by exactly 2 cells (cells found: {hull.Cells.Count}).");
             return hull;
         }
 
@@ -198,7 +219,8 @@ namespace D4BB.Geometry
             return edges;
         }
 
-        static double[] Pivot(List<double[]> pts, List<int> ridge, double[] prevN, double[] centroid, double eps,
+        static double[] Pivot(List<double[]> pts, List<int> ridge, double[] prevN, double[] refPoint,
+                              double[] centroid, double eps,
                               double overrideThetaEps = -1)
         {
             double thetaEps = overrideThetaEps >= 0
@@ -213,10 +235,16 @@ namespace D4BB.Geometry
             // p2 = unit vector perpendicular to e1, e2, prevN — gives signed rotation angle.
             var p2raw = Cross4DRaw(e1, e2, prevN);
             var p2 = Mag(p2raw) > 1e-9 ? Normalize(p2raw) : null;
+            // Orient the sweep geometrically: the raw sign of p2 depends on the arbitrary
+            // ridge vertex order.  The correct outward sweep direction u = −p2 must move the
+            // previous cell's off-ridge points to the NEGATIVE side, i.e. p2·(ref−v0) > 0.
+            // (ref lies ON the previous cell's hyperplane, so this dot product is a pure,
+            // well-conditioned pencil-plane component — sign flips are exact, not noise.)
+            if (p2 != null && refPoint != null && Dot(p2, Sub(refPoint, v0)) < 0)
+                p2 = Scale(p2, -1);
 
             var ridgeSet = new HashSet<int>(ridge);
-            double minTheta = double.MaxValue;
-            double[] bestN = null;
+            var candidates = new List<(double theta, double[] n)>();
             for (int i = 0; i < pts.Count; i++)
             {
                 if (ridgeSet.Contains(i)) continue;
@@ -233,20 +261,35 @@ namespace D4BB.Geometry
                 // O(1) orientation: centroid must lie on the negative side.
                 if (Dot(n, centroid) - d > 0) n = Scale(n, -1);
                 // Signed rotation angle from prevN to n in the (prevN, p2) plane.
-                // Maps to (0, 2π]: skip zero (same cell) and pick smallest positive angle.
                 double cosT = Dot(n, prevN);
+                // Robust came-from guard: candidates coplanar with the previous cell must be
+                // skipped by DIRECTION, not by signed angle.  Floating-point noise can turn the
+                // previous cell's recomputed normal into theta ≈ +1e-9 (> thetaEps), which then
+                // wins the min-theta race and silently swallows the ridge — this lost exactly
+                // one hexagonal-prism cell of prahi.  True adjacent-cell pivots are ≥ ~0.07 rad
+                // apart, so cos > 1 − 1e-7 (θ < ~4.5e-4) can only be the source plane.
+                if (cosT > 1 - 1e-7) continue;
                 double sinT = p2 != null ? -Dot(n, p2) : 0;  // negative = correct CCW direction
                 double theta = Math.Atan2(sinT, cosT);
                 if (theta <= thetaEps) theta += 2 * Math.PI;
                 if (theta > 2 * Math.PI - thetaEps) continue;
-                if (theta < minTheta) { minTheta = theta; bestN = n; }
+                candidates.Add((theta, n));
             }
-            // Verify the best candidate is actually a supporting hyperplane (numerical safety net).
-            if (bestN != null) {
-                double d = Dot(bestN, v0);
-                if (!IsExtreme(pts, bestN, d, eps)) bestN = null;
+            // Take the smallest-angle candidate that is a true supporting hyperplane.
+            // A near-coplanar noise plane through the ridge can undercut the real cell by a
+            // fraction of a degree; discarding the whole pivot in that case (the old "safety
+            // net") lost cells.  In practice the first or second candidate passes IsExtreme,
+            // so the extra support tests are cheap; cap them so a pathological ridge cannot
+            // degrade to O(V²).
+            candidates.Sort((a, b) => a.theta.CompareTo(b.theta));
+            int tested = 0;
+            foreach (var (theta, n) in candidates)
+            {
+                if (++tested > 64) break;
+                double d = Dot(n, v0);
+                if (IsExtreme(pts, n, d, eps)) return n;
             }
-            return bestN;
+            return null;
         }
 
         static bool IsExtreme(List<double[]> pts, double[] n, double d, double eps)
