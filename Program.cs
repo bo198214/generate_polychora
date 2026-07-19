@@ -44,6 +44,11 @@ switch (cmd)
         RunVertexGeneration(vertexDir);
         RunTopologyGeneration(vertexDir, topologyDir);
         break;
+    case "excavate":
+        // Nonconvex regular-faced polychora via cell excavation (see Excavation.cs)
+        Excavation.GenerateCuratedSet(topologyDir, Path.Combine(root, "crf_output"),
+            msg => Console.WriteLine(msg));
+        break;
     case "topology-one" when args.Length >= 2:
         // Generate topology for a single polytope by name (used by Makefile)
         TopologyGenerator.GenerateOne(vertexDir, topologyDir, args[1], eps: 0,  // 0 = auto-scale with circumradius
@@ -55,6 +60,7 @@ switch (cmd)
         Console.WriteLine("  topology         – compute topology for missing files");
         Console.WriteLine("  all              – both steps");
         Console.WriteLine("  topology-one N   – (re)compute topology for one polytope");
+        Console.WriteLine("  excavate         – generate curated nonconvex excavated polychora → crf_output/");
         break;
 }
 

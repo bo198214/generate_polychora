@@ -13,8 +13,9 @@ boundary topology) for the Tesserian Unity project. Two stages:
    incidence. Output: `topology_output/<name>.json`.
 
 The finished `topology_output/*.json` files are copied into the Unity repo at
-`tesserian/Assets/_Tesserian/Common/Resources/polychora/` (the Polychoron Watch loads all
-of them; content is kept byte-identical apart from the `name`/`description` header fields).
+`tesserian/Assets/_Tesserian/RotatingPolychoron/Resources/polychora/` (the Polychoron Watch
+loads all of them; content is kept byte-identical apart from the `name`/`description`
+header fields).
 
 Tests: `dotnet test Tests/Tests.csproj` verifies V/E/F/C of every generated file against
 the literature values for all 47 polytopes (Klitzing / Wikipedia "Uniform 4-polytope").
@@ -73,3 +74,36 @@ set the environment variable `HULL_KEEP_BROKEN=1` to write the file anyway.
 After the fix, all 47 topologies validate: literature element counts, Euler characteristic
 0, every face shared by exactly two cells. Regenerating previously-good polytopes with the
 fixed pivot yields set-identical topology (cell/face discovery order may differ).
+
+## Nonconvex regular-faced polychora (excavation)
+
+`dotnet run -- excavate` (`Excavation.cs`) applies **cell excavation** — the elementary
+nonconvex CSG step: one boundary cell is replaced by the lateral cells of a unit-edged
+pyramid whose apex points into the solid. This is the 4D version of Bonnie Stewart's
+excavation move (the operation behind the 3D Stewart toroids) and the mirror image of the
+"augmentation" used by the CRF community (hi.gher.space; see qfbox.info/4d/crf). The
+convex CRF world is systematically explored (all regular/uniform polychora known, 314
+million non-adjacent 600-cell diminishings enumerated); embedded *nonconvex* regular-faced
+polychora are essentially uncharted — the community's nonconvex work concentrates on
+self-intersecting star polychora instead.
+
+Feasibility rules (checked at runtime): the pyramid needs base circumradius < edge
+(icosahedron 0.951 ✓, octahedron 0.707 ✓, tetrahedron 0.612 ✓, dodecahedron 1.40 ✗ —
+dodecahedral cells cannot be excavated unit-edged), and the apex must stay strictly inside
+every original cell hyperplane (rules out the 16-cell: dent depth 1.118e > thickness 1.0e).
+For a convex source the dent pyramid is automatically contained in the solid, so the
+result is embedded; closedness and Euler characteristic are re-validated after surgery.
+
+Curated outputs (`crf_output/`, copied to the Unity repo's
+`Assets/_Tesserian/RotatingPolychoron/Resources/complexes/`, shown by the Watch's
+dev Complex mode which renders nonconvex figures with real occlusion):
+
+| file | source | surgery | V/E/F/C |
+|---|---|---|---|
+| excavated-ex | 600-cell | one tet cell → pentachoron dimple | 121/724/1206/603 |
+| bi-excavated-ex | 600-cell | two antipodal pentachoron dimples | 122/728/1212/606 |
+| excavated-ico | 24-cell | one octahedral-pyramid dent, apex exactly at the center | 25/102/108/31 |
+| excavated-sadi | snub 24-cell | one shallow icosahedral-pyramid dimple (h ≈ 0.31e) | 97/444/510/163 |
+
+Next steps if desired: multi-excavations with pairwise-disjoint pyramids, tunnel/toroid
+constructions (boundary topology beyond the 3-sphere), and general boolean CSG.
