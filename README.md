@@ -290,7 +290,30 @@ rotations). Modes are computed up to 3 × the lowest frequency (at least 6 per s
 ≤ 800), and the export ends with a complete band: the computed set or the 3× limit may end
 inside a band, whose modes would then be under-represented, so the last band is cut at a
 band gap. This leaves 10–720 modes (2–59 multiplets) per polychoron, up to 1.5–2.7 × the
-lowest frequency. A full run takes ~2 h.
+lowest frequency (the isolated-wall polychora below: 6–9 bands up to 4.0–5.4 ×). A full run
+takes ~2.5 h.
+
+**Isolated walls.** In prahi, prix and gidpixhi the 120 largest walls touch no other large
+wall, only smaller, stiffer ones: the lowest mode any neighbour wall can have (simply
+supported) lies at 4.6–5.6 × the fundamental. Every band is then one mode of a single large
+wall, repeated on all 120 of them: one multiplet per band, multiplicity 120 × wall multiplet.
+`modal_hollow.py` detects this (a single soft shape, no ridge between two soft walls,
+neighbours ≥ `--isolated-min` 3.5 × f1) and computes one large wall welded to all its 32–62
+neighbours, with the smooth-distance basis below (degree 10, neighbours 8). With the
+neighbours' outer ridges clamped, all other large walls are at rest, which to first order is
+the band's mean (its trace). Checked against the full coupled prix at low degree (50 280
+unknowns, 22 min, 5 GB): band 1 spans 0.870–0.941 with mean 0.936, the patch gives 0.941.
+Hinging the outer ridges towards the other large walls moves into the lower part of the band;
+that difference (≤ 1.2 %) is a rough estimate of the band's half width and enters `rel_error`,
+together with the changes from wall degree 8 → 10 and neighbour degree 6 → 8. The export ends
+at the neighbours' lowest simply supported mode, below which no band of theirs can lie (above
+it, their bands of 600–1200 modes would dominate). Result: 6–9 bands up to 4.0–5.4 × f1
+instead of 2 up to 1.9 ×, `rel_error` ≤ 1.9 %. The welds are not rigid: compared with a
+clamped single wall, the neighbours lower the frequencies by about 4 % (prahi), 7 %
+(gidpixhi) and 11 % (prix). The neighbours' `gains.cells` hold the small share of each band
+that leaks into them (walls that touch no large wall: 0). grix, rox, srix, sidpixhi and prit
+also have isolated largest walls, but their neighbours resonate already at 1.7–2.1 × f1; they
+stay with the coupled model (`--no-isolated` forces it everywhere).
 
 **Validation and accuracy.** A single simply supported cube wall reproduces the analytic
 f = 3π² h √((λ*+2μ)/12) / (2π) to 5 digits (and its (1,1,2) multiplet at exactly 2×);
@@ -302,9 +325,24 @@ independent of h) — the fixed-ridge basis avoids that. Walls with obtuse inner
 angles (dodecahedron 117°, Archimedean cells up to ~160°) have weak edge singularities, so
 convergence in the degree is algebraic: first bands are accurate to ~1 % for cube and
 tetrahedron walls and ~5–10 % (too high; Ritz values are upper bounds) for dodecahedral and
-many-faced walls. `rel_error` is an indicator per multiplet (the clamped single wall of the
-dominant cell shapes, degree p vs p + 2), pessimistic for higher modes; for the first
-multiplet it is 2.5 % (median) and at most 7 % (prahi).
+many-faced walls — probably more, see the next paragraph. `rel_error` is an indicator per
+multiplet (the clamped single wall of the dominant cell shapes, degree p vs p + 2),
+pessimistic for higher modes; for the first multiplet it is 2.5 % (median) and at most 7 %.
+
+**Smooth-distance basis.** The flat-top bubble converges slowly when a wall is clamped or
+stiffly welded: its slope at a face is poly/δ there, so the polynomial itself would have to
+vanish on all 26–62 faces. The isolated-wall model uses φ = (Σ_f d_f⁻²)^(−1/2) instead, a
+smooth distance to the face planes (φ ≈ d_f at each face, no layer width): φ²·poly has zero
+value and slope on every face and carries the interior, φ·poly (degree p − 2) the rotations
+at the welds; each cell's basis is orthonormalised. A clamped rhombicuboctahedron wall
+converges to 0.03 % at degree 4 (flat-top bubble: 2 % at degree 10), the large walls of
+prahi, prix and gidpixhi to 0.1–0.5 % at degree 8 for their lowest four modes. Measured
+against it, the flat-top results for these three were too high by 33 % (prahi), 16 % (prix)
+and 31 % (gidpixhi), far beyond their indicator (7, 4, 6 %): the change p → p + 2 of a
+slowly converging sequence underestimates the distance to its limit, and the stiff
+neighbours at degree 1–2 could hardly rotate. The other polychora still use the flat-top
+bubble; walls with many faces are probably too high there as well, ratios within one
+polychoron less so.
 
 **Differences to `modal_output`.** No `gains.vertex` (vertices lie on the fixed ridges),
 `tangential` = 0 (in-plane membrane motion is not modelled; its modes are far higher),
@@ -315,9 +353,11 @@ mainly the bands of its own wall shape, a small stiff wall barely excites the lo
 
 **Character and limits.** A hollow polychoron's spectrum consists of bands: one mode per
 soft wall and wall mode, split by the coupling through the welds. Where the largest walls
-do not touch each other (gidpixhi, prahi, …) the coupling runs only through stiff small walls
-and a band of 120 modes is narrower than 0.1 % — the body sounds like a single wall: below
-twice the fundamental, gidpixhi and prahi have just two such clusters (120 and 360 modes).
+do not touch each other (prahi, prix, gidpixhi, …) the coupling runs only through smaller,
+stiffer walls and a band of 120 modes stays narrow — the body sounds like a single wall. The
+three isolated-wall polychora therefore share their first four tones (0, ≈ 1025, ≈ 1773,
+≈ 2042 cent: the clamped modes of a nearly spherical wall) and differ in pitch (f1 = 0.995,
+0.837, 0.805) and in their upper tones.
 `synth_modal.py --detune` makes the clusters shimmer, as real imperfections would. Only the lowest bands are computed,
 so the high "ping" of a small stiff wall hit directly is missing. Example sounds:
 `make hollow-sounds` (`synth_modal.py --modal-dir modal_hollow_output --out-dir
