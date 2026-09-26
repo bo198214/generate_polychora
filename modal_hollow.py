@@ -26,7 +26,8 @@ The bending spectrum is then exactly linear in h: frequency(h) = frequency * h /
 Discretisation
 --------------
 Per cell, w = b(s) * poly(s) with poly of total degree <= p in local 3D coordinates and a
-"flat-top" bubble b = prod_faces tanh(dist_f / delta) (delta = inradius / 3): it vanishes
+"flat-top" bubble b = prod_faces tanh(dist_f / delta) (delta = 3, 1 or 0.5 x inradius for
+cells with <= 8, <= 12 or more faces): it vanishes
 linearly on every face like the polynomial bubble prod dist_f (its delta -> infinity limit),
 but stays ~1 inside even for cells with 62 faces. The limit p -> infinity does not depend on
 delta. Cell matrices are computed once per cell shape (flag-tetrahedra Gauss quadrature) and
@@ -93,7 +94,7 @@ class CellShape:
     Local coordinates s = T (x - o) / r (r = cell circumradius); matrices are per unit
     thickness factors: K = kb * h^3 / 12 / r, M = G * h * r^3 with the returned kb, G."""
 
-    def __init__(self, poly, c, p, lam_s, mu, q=None, delta_frac=1 / 3):
+    def __init__(self, poly, c, p, lam_s, mu, q=None, delta_frac=None):
         self.o, self.T, self.r = cell_frame(poly, c)
         self.p = p
         self.mono = Monomials(3, p)
@@ -109,6 +110,9 @@ class CellShape:
             self.faces.append((self.T @ _unit(v), np.linalg.norm(v) / self.r))
         self.m = np.array([m for m, _ in self.faces])
         self.d = np.array([d for _, d in self.faces])
+        if delta_frac is None:                         # auto: nearly polynomial bubble for few
+            F = len(self.d)                            # faces (fastest convergence), flat-top
+            delta_frac = 3.0 if F <= 8 else 1.0 if F <= 12 else 0.5   # for many
         self.delta = self.d.min() * delta_frac
         self.norm = np.prod(np.tanh(self.d / self.delta))
         E = self.E
@@ -231,7 +235,7 @@ def congruence(ref, V, adjacency_ref, adjacency, tol=1e-6):
 
 
 def analyse_hollow(poly, cell_labels, p_big, p_small, beta, n_modes, lam=1.0, mu=1.0,
-                   stiff_ratio=3.0, delta_frac=1 / 3, verbose=True):
+                   stiff_ratio=3.0, delta_frac=None, verbose=True):
     """Welded thin-walled hollow polychoron. Returns frequencies (h = H_REF), multiplets,
     per-cell ∫ w^2 contributions for gains."""
     t0 = time.time()
@@ -504,12 +508,14 @@ def main():
                     help="modes (with multiplicity) to compute, at least 6 per wall of the "
                          "most frequent shape ...")
     ap.add_argument("--max-modes", type=int, default=800, help="... up to this many")
-    ap.add_argument("--max-dofs", type=int, default=14000,
+    ap.add_argument("--max-dofs", type=int, default=26000,
                     help="budget that sets the polynomial degrees per polychoron")
     ap.add_argument("--max-ratio", type=float, default=3.0,
                     help="export multiplets up to this multiple of the lowest frequency")
     ap.add_argument("--beta", type=float, default=1e3, help="hinge penalty factor")
-    ap.add_argument("--delta", type=float, default=0.5, help="bubble layer delta / inradius")
+    ap.add_argument("--delta", type=float, default=None,
+                    help="bubble layer delta / inradius (default: 3 for cells with <= 8 faces, "
+                         "1 for <= 12, 0.5 above)")
     args = ap.parse_args()
 
     paths = sorted(glob.glob(os.path.join("topology_output", "*.json")))

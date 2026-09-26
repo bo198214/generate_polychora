@@ -261,8 +261,9 @@ indistinguishable; the angular ones have their own partial patterns.
 polychora as **thin-walled hollow 4D bodies** → `modal_hollow_output/<name>.json`, same
 format as `modal_output` (differences below). As solids, polychora of equal circumradius
 sound alike; as hollow bodies they sound like their walls, whose pitch is set by the cell
-shapes and sizes — the lowest frequencies of the 47 spread over about ×15 instead of ×1.33,
-and e.g. the 120-cell and the 600-cell, indistinguishable as solids, are ~1.5 octaves apart.
+shapes and sizes — the lowest frequencies of the 47 spread over ×16 (0.124 for grip to 1.985
+for ex at h_ref) instead of ×1.33, and e.g. the 120-cell and the 600-cell, indistinguishable
+as solids, are 1.7 octaves apart.
 
 **Model.** Every cell is a flat 3D wall ("hyperplate") of thickness h that bends in the 4th
 direction, along its normal (Kirchhoff: (h³/12) ∫ [λ*(Δw)² + 2μ|∇∇w|²], λ* = 2λμ/(λ+2μ),
@@ -275,15 +276,18 @@ is continuous, imposed by a penalty β = 10³ μh³/ℓ. Same material and units
 reference thickness h_ref = 0.06 R; the bending spectrum is exactly linear in h:
 **f_Hz = frequency · (h/h_ref) · c_s/R**.
 
-**Method.** Per cell, w = b(s)·poly(s) with a "flat-top" bubble b = Π_faces tanh(dist_f/δ),
-δ = inradius/2: it vanishes linearly on every face like the polynomial bubble Π dist_f (its
-δ → ∞ limit), but stays ≈ 1 inside even for the 62-face cells, where the polynomial bubble
-collapses to a narrow peak; the p → ∞ limit does not depend on δ. Cell matrices are built
+**Method.** Per cell, w = b(s)·poly(s) with a "flat-top" bubble b = Π_faces tanh(dist_f/δ):
+it vanishes linearly on every face like the polynomial bubble Π dist_f (its δ → ∞ limit),
+but stays ≈ 1 inside even for the 62-face cells, where the polynomial bubble collapses to a
+narrow peak. The p → ∞ limit does not depend on δ, the speed does: δ = 3 × inradius for cells
+with ≤ 8 faces (nearly the polynomial bubble — tetrahedral walls converge to 0.1 % at degree
+6 instead of 1.4 % with δ = r/2), 1 × for ≤ 12 faces, 0.5 × for more. Cell matrices are built
 once per cell shape (Gauss quadrature on the flag tetrahedra) and carried to every
 congruent cell by an orthogonal map found from the vertex sets. Degrees are chosen per
-polychoron within a budget of 14 000 unknowns (26 000 for the largest): the soft (large)
+polychoron within a budget of 26 000 unknowns: the soft (large)
 walls get degree 4–6, much stiffer small walls 1–2 (in the audible band they only transmit
-rotations). Modes are exported up to 3 × the lowest frequency, at least 6 per soft wall (≤ 800).
+rotations). Modes are exported up to 3 × the lowest frequency, at least 6 per soft wall (≤ 800):
+31–798 modes (2–80 multiplets) per polychoron. A full run takes ~2 h.
 
 **Validation and accuracy.** A single simply supported cube wall reproduces the analytic
 f = 3π² h √((λ*+2μ)/12) / (2π) to 5 digits (and its (1,1,2) multiplet at exactly 2×);
@@ -296,7 +300,8 @@ angles (dodecahedron 117°, Archimedean cells up to ~160°) have weak edge singu
 convergence in the degree is algebraic: first bands are accurate to ~1 % for cube and
 tetrahedron walls and ~5–10 % (too high; Ritz values are upper bounds) for dodecahedral and
 many-faced walls. `rel_error` is an indicator per multiplet (the clamped single wall of the
-dominant cell shapes, degree p vs p + 2), pessimistic for higher modes.
+dominant cell shapes, degree p vs p + 2), pessimistic for higher modes; for the first
+multiplet it is 2.5 % (median) and at most 7 % (prahi).
 
 **Differences to `modal_output`.** No `gains.vertex` (vertices lie on the fixed ridges),
 `tangential` = 0 (in-plane membrane motion is not modelled; its modes are far higher),
