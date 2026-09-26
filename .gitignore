@@ -1,2 +1,5 @@
 obj/
 bin/
+# example sounds (regenerate with `make sounds`) and their legends
+*.wav
+modal_output/**/_*.txt

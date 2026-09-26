@@ -123,9 +123,11 @@ obey the 4D Navier–Cauchy equations
     sigma(u) n = 0                                          on its 3D boundary (the cells),
 
 with sigma = lambda tr(eps) I + 2 mu eps. Default material: lambda = mu (the Cauchy solid,
-`--lame-ratio`). Units: edge length a = 1, density 1, shear modulus 1, so the shear wave
-speed is c_s = 1 and all frequencies are dimensionless: **f_Hz = frequency · c_s / a**.
-The 10 rigid-body modes of a free 4D body (4 translations + 6 rotation planes) are removed.
+`--lame-ratio`). Units: **circumradius R = 1** (the Polychoron Watch shows every polychoron
+at radius 1, while `topology_output` has edge length 2), density 1, shear modulus 1, so the
+shear wave speed is c_s = 1 and all frequencies are dimensionless:
+**f_Hz = frequency · c_s / R**. The 10 rigid-body modes of a free 4D body (4 translations +
+6 rotation planes) are removed.
 
 **Method.** Rayleigh–Ritz with a complete polynomial basis — every displacement component
 is a polynomial of total degree ≤ 12 in (x, y, z, w), 4 × 1820 basis fields; this is the 4D
@@ -137,7 +139,7 @@ reflections and central inversion of the polytope split the eigenproblem into pa
 blocks. Two numerical details matter: every monomial is normalised before the Löwdin
 orthogonalisation (degree 12 on the thin 5-cell has Gram condition ~1e17 raw, ~3e13
 scaled), and no basis direction may be dropped — dropping breaks the symmetry of the Ritz
-space and splits degenerate multiplets.
+space and splits degenerate multiplets. A full run takes ~15 min.
 
 **Validation** (`python modal_analysis.py --selftest`): polytope moments agree with exact
 values (tesseract) and an independent cone quadrature (5-cell, 24-cell) to 1e-15; 4-volumes
@@ -151,25 +153,27 @@ analytic free-vibration frequencies of the unit 3-ball and 4-ball (torsional mod
 **Accuracy.** Polytope edges are weak singularities of the elastic field, so convergence in
 the degree is algebraic rather than exponential: the lowest multiplets are typically
 accurate to 0.1–0.3 %. Each multiplet carries `rel_error` = relative change from degree 10
-to 12; export stops at the first multiplet where this exceeds 1 % (`--max-error`).
-Symmetry-degenerate modes agree to ~1e-9. Distinct multiplets closer than 1e-5 (relative)
-are merged into one: such near-degeneracies occur (3.7e-6 between a 9- and a 6-fold
-multiplet of prico), are inaudible, and their numerical eigenvectors mix, so only the
-merged sums are exactly symmetric. Gains of symmetry-equivalent vertices and cells agree
-to ≤ 1e-6.
+to 12; export stops at the first multiplet where this exceeds 1 % (`--max-error`), which
+leaves 120–599 modes (26–106 multiplets) per polychoron, up to 2.5–3.6 × the lowest
+frequency. Symmetry-degenerate modes agree to ~1e-9. Distinct multiplets closer than 1e-5
+(relative) are merged into one: such near-degeneracies occur (3.7e-6 between a 9- and a
+6-fold multiplet of prico), are inaudible, and their numerical eigenvectors mix, so only
+the merged sums are exactly symmetric. Gains of symmetry-equivalent vertices and cells
+agree to ≤ 5e-6.
 
 ### Output format `modal_output/<name>.json`
 
 | field | meaning |
 |---|---|
-| `modes.frequency[g]` | dimensionless frequency of multiplet g (ascending); f_Hz = frequency · c_s/a |
+| `modes.frequency[g]` | dimensionless frequency of multiplet g (ascending); f_Hz = frequency · c_s/R |
 | `modes.multiplicity[g]` | number of degenerate modes in the multiplet (symmetry) |
 | `modes.rel_error[g]` | estimated relative frequency error |
 | `gains.mean.normal[g]`, `.tangential[g]` | excitation of multiplet g by a hit at a uniformly random boundary point — the typical hit |
 | `gains.cells[s]` | same, averaged over one cell of class s (`label` e.g. `truncated octahedron`, `cube #2`; `count` cells) |
 | `gains.vertex` | same, for a hit exactly at a vertex (all vertices of a uniform polychoron are equivalent) |
 | `cell_class[c]` | class s of cell c of `topology_output/<name>.json` (same indices) |
-| `model`, `geometry` | physics, units, degree, volume, circumradius, detected symmetries |
+| `model` | physics, units, polynomial degree, error and merge tolerances |
+| `geometry` | `volume` (in R⁴), `edge_length` (in R), element counts, detected symmetries |
 
 A gain is mass · Σ_{k∈g} (u_k(p) · d)² for mass-normalised mode shapes u_k (∫ρ|u|² = 1): the
 excitation of the multiplet by a unit impulse along d at p, picked up along d, relative to
@@ -178,22 +182,29 @@ cell normal (vertex: normalised sum of the incident cell normals), `tangential` 
 over the 3 tangent directions. Summing over the multiplet makes a gain independent of the
 arbitrary basis inside a degenerate eigenspace, hence identical for all symmetry-equivalent
 cells — one table per cell class. Cell classes are orbits, not shapes: sidpith has two
-classes of cubes (24 + 8).
+classes of cubes (24 + 8). Sum and multiplicity are complementary: averaged over the whole
+boundary (`gains.mean`), every mode of a symmetry multiplet is excited equally (Schur's
+lemma), so the sum is `multiplicity` × the gain of one mode; at a single hit point the
+modes share it unevenly and basis-dependently, and only the sum is physical. The ideal
+object needs only the sum (all m modes ring as one sinusoid); the multiplicity matters once
+the degeneracy is broken (below).
 
 Why averages and not point values: at symmetric points (vertex, edge midpoint, face or
 cell centre) many multiplets vanish by symmetry, so they are atypical hit points, and the
 gain field of a multiplet peaks strongly at the cell's corners (up to ~150× its cell
 average on the 5-cell). Interpolating point values therefore misses the spectrum of a
 random hit by ~100 %; the cell averages are computed exactly (per-cell monomial moments
-as quadratic forms, cross-checked against a degree-25 quadrature to 1e-11). The lowest
-multiplet is typically a shear/torsion mode whose boundary motion is almost purely
-tangential: a perpendicular hit barely excites it, a glancing hit does.
+as quadratic forms, cross-checked against a degree-25 quadrature to 1e-11). In the 19
+roundest polychora the lowest multiplet is a torsion mode (as in the 4-ball) whose
+boundary motion is almost purely tangential: a perpendicular hit barely excites it
+(< 5 % of the strongest multiplet), a glancing hit does; in the angular ones it is
+excited normally as well (up to ~60 %: hex, pen).
 
 **Synthesis recipe (game).** A hit with impulse J (normal component J_n, tangential J_t) on
 cell c rings as a bank of damped oscillators, one per multiplet (s = `cell_class[c]`):
 
     y(t) = Σ_g A_g exp(-t / tau_g) cos(2π f_g t)
-    f_g   = scale · frequency[g]                     (scale = c_s / a in Hz)
+    f_g   = scale · frequency[g]                     (scale = c_s / R in Hz)
     A_g   = (J_n² cells[s].normal[g] + J_t² cells[s].tangential[g]) / mass · M(f_g)
     tau_g = 1 / (π · loss · f_g)                      (material loss factor)
 
@@ -204,25 +215,39 @@ For hits close to a vertex, blend towards `gains.vertex`; where only one sound p
 polychoron is wanted, use `gains.mean`. If sound radiation is modelled separately, √gain
 is the pure excitation amplitude.
 
+**Symmetry breaking (detuning).** A real object is never perfectly symmetric: small
+imperfections split every multiplet into m = `multiplicity` partials with slightly
+different frequencies — the source of the beating ("warble") of bells. Random-matrix model
+of an unknown imperfection: per multiplet, the relative detunings are the eigenvalues of a
+random symmetric m×m matrix (GOE, which gives realistic level repulsion) scaled to the
+chosen RMS, and the multiplet's gain is divided among the partials with Porter–Thomas
+weights z_k²/|z|², z ~ N(0, I), so the attack stays the same. The split frequencies belong
+to the object (fixed seed per exemplar), the weights are drawn per hit. RMS 0.02–0.2 % is
+bell-like, ~0.3 % gives clearly audible slow beating, ~1 % chorus/roughness. The beating
+pattern reflects the symmetry group: the 5-cell's multiplets have 1–6 modes, the H4
+polychora's up to 48, which turn into dense shimmering clouds. In a game, capping each
+multiplet at 3–4 partials sounds almost the same and keeps the oscillator count low.
+
 ### Example sounds
 
 `python synth_modal.py` (or `make sounds`) renders one typical hit per polychoron to
 `modal_output/sounds/<name>.wav` and all of them, highest to lowest, to `_tour.wav`
-(legend with start times in `_tour.txt`). `--scale` (default 3000 Hz) is the common
-scaling, f_Hz = scale · frequency · L, and `--size` decides what the polychora share:
-
-| `--size` | L | scale means | fundamentals at 3000 Hz |
-|---|---|---|---|
-| `edge` (default, as in `topology_output`) | 1 | c_s / a (steel: a ≈ 1 m) | 101 Hz (gidpixhi) … 2.27 kHz (pen), ×22 |
-| `radius` | R / a | c_s / R | within ×1.33 (≈ 5 semitones) |
-| `volume` | (V / a⁴)^¼ | c_s / V^¼ | within ×2.2 |
-
-So pitch is essentially set by size: at equal edge length the circumradius ranges from
-0.63 a (pentachoron) to 12.8 a (gidpixhi); f scales as 1/size ∝ V^(−1/4), and the shape
-only contributes a factor between 0.46 (pentachoron: pointy, hence "soft") and 1.0 (the
-round H4 polychora ring within 0.5 % of a 4-ball of the same volume, with the same
-multiplet sequence 16, 9, 4, 30, …). Output for `--size radius|volume` goes to
-`modal_output/sounds_<size>/`. Other options: `--site mean|cell|vertex|all` (`all`: typical
+(legend with start times in `_tour.txt`). `--scale` (default 1000 Hz) is the common size
+scaling c_s/R — e.g. steel (c_s ≈ 3200 m/s) with R = 3.2 m — and puts the fundamentals at
+391 Hz (grip) … 521 Hz (hex). Other options: `--site mean|cell|vertex|all` (`all`: typical
 hit, each cell class, vertex in sequence), `--direction normal|tangential`, `--loss`,
 `--contact-ms` (default: mallet adapted to the exported band so its truncation is
-inaudible), `--pickup displacement|velocity|acceleration`, `--duration`, `--tour-seconds`.
+inaudible), `--pickup displacement|velocity|acceleration`, `--duration`, `--tour-seconds`,
+`--detune` (RMS detuning of the degenerate modes, default 0 = ideal object) with `--seed`
+(which imperfect exemplar), e.g. `python synth_modal.py --detune 0.003 --out-dir
+modal_output/sounds_detune`. The WAVs are git-ignored.
+
+What sets the pitch of a solid polychoron: for one shape every size measure is equivalent
+(f ∝ 1/size), across shapes the circumradius predicts it best — at equal R the lowest
+frequencies of all 47 lie within ×1.33 (≈ 5 semitones), at equal 4-volume within ×2.2,
+at equal edge length (as in `topology_output`) within ×22. The shape contributes a factor
+between 0.46 (pentachoron: pointy, fills 3 % of its circumscribed ball, hence "soft") and
+1.00 relative to the 4-ball of equal volume. The big H4 polychora (hi, ex, grix, grahi,
+prahi, gidpixhi, …) ring within 0.5 % of that ball and share its partials (1 : 1.45 : 1.82 :
+2.17 : 2.50 for multiplets 9, 16, 25, 36, …), so as solids they are practically
+indistinguishable; the angular ones have their own partial patterns.
