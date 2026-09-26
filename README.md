@@ -286,8 +286,11 @@ once per cell shape (Gauss quadrature on the flag tetrahedra) and carried to eve
 congruent cell by an orthogonal map found from the vertex sets. Degrees are chosen per
 polychoron within a budget of 26 000 unknowns: the soft (large)
 walls get degree 4–6, much stiffer small walls 1–2 (in the audible band they only transmit
-rotations). Modes are exported up to 3 × the lowest frequency, at least 6 per soft wall (≤ 800):
-31–798 modes (2–80 multiplets) per polychoron. A full run takes ~2 h.
+rotations). Modes are computed up to 3 × the lowest frequency (at least 6 per soft wall,
+≤ 800), and the export ends with a complete band: the computed set or the 3× limit may end
+inside a band, whose modes would then be under-represented, so the last band is cut at a
+band gap. This leaves 10–720 modes (2–59 multiplets) per polychoron, up to 1.5–2.7 × the
+lowest frequency. A full run takes ~2 h.
 
 **Validation and accuracy.** A single simply supported cube wall reproduces the analytic
 f = 3π² h √((λ*+2μ)/12) / (2π) to 5 digits (and its (1,1,2) multiplet at exactly 2×);
@@ -313,8 +316,9 @@ mainly the bands of its own wall shape, a small stiff wall barely excites the lo
 **Character and limits.** A hollow polychoron's spectrum consists of bands: one mode per
 soft wall and wall mode, split by the coupling through the welds. Where the largest walls
 do not touch each other (gidpixhi, prahi, …) the coupling runs only through stiff small walls
-and a band of 120 modes is narrower than 0.1 % — the body sounds like a single wall
-(`synth_modal.py --detune` makes such clusters shimmer). Only the lowest bands are computed,
+and a band of 120 modes is narrower than 0.1 % — the body sounds like a single wall: below
+twice the fundamental, gidpixhi and prahi have just two such clusters (120 and 360 modes).
+`synth_modal.py --detune` makes the clusters shimmer, as real imperfections would. Only the lowest bands are computed,
 so the high "ping" of a small stiff wall hit directly is missing. Example sounds:
 `make hollow-sounds` (`synth_modal.py --modal-dir modal_hollow_output --out-dir
 modal_hollow_output/sounds`; `--scale` = c_s/R for the reference thickness).

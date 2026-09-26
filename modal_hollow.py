@@ -365,6 +365,23 @@ def analyse_hollow(poly, cell_labels, p_big, p_small, beta, n_modes, lam=1.0, mu
     return omega, wsq, degree, shapes
 
 
+def complete_bands(freq, top=0.4):
+    """Number of leading multiplets that form complete bands. A hollow spectrum is banded
+    (one mode per wall and wall mode), and the computed set or the frequency limit may end
+    inside a band, whose modes would then be under-represented. Drop the last band: cut at
+    the last relative gap in the top 40 % of the range that is at least half the widest gap
+    there (and >= 3 %) -- a band boundary, not a split inside a coupled band."""
+    f = np.asarray(freq)
+    if len(f) < 3:
+        return len(f)
+    gaps = (f[1:] - f[:-1]) / f[:-1]
+    ok = f[:-1] >= (1 - top) * f[-1]
+    if not ok.any():
+        return len(f)
+    big = np.flatnonzero(ok & (gaps >= max(0.03, 0.5 * gaps[ok].max())))
+    return int(big[-1]) + 1 if len(big) else len(f)
+
+
 def choose_degrees(poly, cell_labels, max_dofs, stiff_ratio=3.0):
     """Highest degree for the soft cells (and 2 or 1 for stiff ones) within the DOF budget;
     also returns how many walls are soft."""
@@ -415,12 +432,13 @@ def run(poly, args, cell_class_info):
         diff = np.abs(wa[:m] - wb[:m]) / wb[:m]
         nearest = np.abs(wa[None, :m] - omega[:, None]).argmin(axis=1)
         rel_err += share[lab] / total * diff[nearest]
-    # export range: up to --max-ratio x the lowest frequency
+    # export range: up to --max-ratio x the lowest frequency, ending with a complete band
     groups = []
     for g in group_multiplets(omega, 1e-5)[:-1]:      # last one may be cut
         if omega[g[0]] > args.max_ratio * omega[0]:
             break
         groups.append(g)
+    groups = groups[:complete_bands([omega[g[0]] for g in groups])]
 
     # gains (mass-relative, like modal_output): normal deflection only (bending model)
     C = len(poly.cells)
