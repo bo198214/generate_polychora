@@ -186,17 +186,18 @@ class CellShape:
 
     Two bubbles: the flat-top b = prod_f tanh(d_f / delta) (smooth, vanishes linearly on each
     face, its slope dies out towards the face's edges), and phi = (sum_f d_f^-2)^(-1/2), a
-    smooth distance to the face planes (phi ~ d_f at face f, no layer width); phi * poly has
-    a log-divergent bending energy at the cell's edges unless poly vanishes there.
-    bubble "mixed" (default): phi^2 * poly(degree p), zero value and slope on every face (the
+    smooth distance to the face planes (phi ~ d_f at face f, no layer width).
+    bubble "dist" (default): phi^2 * poly(degree p), zero value and slope on every face (the
     interior; a clamped wall converges to < 1 % at degree 6), plus, unless clamped,
-    b * poly(degree p_slope), which carries the hinge rotations at the faces.
-    bubble "dist": the same with phi * poly(p_slope) for the rotations.
-    bubble "tanh": b * poly(degree p) only (first version; a clamped or stiffly welded wall
-    needs a poly vanishing on all faces, which converges slowly).
+    phi * poly(degree p_slope), which carries the hinge rotations at the faces. Near a cell
+    edge phi * poly behaves like r, the exact solution like r^(pi/alpha): best for the obtuse
+    edges of Archimedean cells (simply supported tetrahedron: +0.14 % at p_slope = 6).
+    bubble "both": the rotations carried by b * poly and phi * poly (slightly better per
+    degree, more unknowns). bubble "tanh": b * poly(degree p) only (first version; a clamped
+    or stiffly welded wall needs a poly vanishing on all faces, which converges slowly).
     The basis is orthonormalised (G = I) by a QR of the weighted values."""
 
-    def __init__(self, poly, c, p, lam_s, mu, q=None, delta_frac=None, bubble="mixed",
+    def __init__(self, poly, c, p, lam_s, mu, q=None, delta_frac=None, bubble="dist",
                  clamped=False, p_slope=None):
         self.o, self.T, self.r = cell_frame(poly, c)
         self.bubble = bubble
@@ -208,7 +209,7 @@ class CellShape:
         elif bubble == "both":
             self.groups = [("tanh", 1, ps), ("dist", 1, ps), ("dist", 2, p)]
         else:
-            self.groups = [("tanh" if bubble == "mixed" else "dist", 1, ps), ("dist", 2, p)]
+            self.groups = [("dist", 1, ps), ("dist", 2, p)]
         self.p = max(pg for _, _, pg in self.groups)
         # polynomials: Legendre products P_a1(s1) P_a2(s2) P_a3(s3), total degree <= p (the same
         # space as the monomials, better conditioned on the cell, |s| <= 1)
@@ -584,9 +585,11 @@ def analyse_hollow_sym(poly, cell_labels, degree, beta, omega_max, max_modes, la
     shapes = dict(shapes or {})
     for lab in labels:
         if lab not in shapes:
-            dg = degree[lab]
-            p, ps = (dg[1], dg[0]) if isinstance(dg, tuple) else (dg, None)
-            shapes[lab] = CellShape(poly, cell_labels.index(lab), p, lam_s, mu, p_slope=ps)
+            dg = degree[lab]                            # p, (p_slope, p) or (bubble, p_slope, p)
+            dg = dg if isinstance(dg, tuple) else (dg, dg)
+            dg = dg if len(dg) == 3 else ("dist",) + dg
+            shapes[lab] = CellShape(poly, cell_labels.index(lab), dg[2], lam_s, mu,
+                                    p_slope=dg[1], bubble=dg[0])
 
     def cell_adj(c):
         verts = list(poly.cells[c])
@@ -917,40 +920,81 @@ def run(poly, args, cell_class_info):
     return run_dist(poly, args, cell_class_info, labels)
 
 
+def basis_size(spec):
+    """Number of basis functions of a CellShape spec (bubble, slope degree, interior degree)."""
+    kind, ps, p = spec
+    nb = lambda q: math.comb(q + 3, 3)
+    return (2 if kind == "both" else 1) * nb(ps) + nb(p)
+
+
 def run_dist(poly, args, cell_class_info, labels):
-    """Coupled model with the smooth-distance basis, block-diagonalised by symmetry. Soft
-    walls: interior degree p, slopes p - 2; stiff walls: slopes --stiff-degree, interior 2
-    (their compliance at the welds depends on the slope degree only). All modes up to
-    --max-ratio x f1 (at most --max-modes), exported up to the last complete band.
-    Error indicator: change of the two blocks chi = 0 and chi = all from a run with every
-    degree lowered by 2 (matched mode by mode within a block)."""
+    """Coupled model, block-diagonalised by symmetry. Soft walls: both slope bubbles, slopes
+    p - 2, interior p. Stiff walls whose simply supported fundamental lies in the computed
+    range take part in the modes: both slope bubbles, slopes --stiff-degree, interior 4; the
+    others only transmit rotations: phi slopes --stiff-degree, interior 2. If a symmetry
+    block would exceed --block-budget unknowns, the range is lowered (by 0.5 x f1, down to
+    3 x f1). All modes up to that range x f1 (at most --budget), exported up to the end of
+    the band that reaches over it. Error indicator: change of two symmetry blocks when every
+    degree is lowered by 2 (pessimistic)."""
     soft = soft_shapes(poly, labels)
     ps, pst = args.soft_degree, args.stiff_degree
-    degree = {l: ((ps - 2, ps) if l in soft else (pst, 2)) for l in set(labels)}
-    coarse = {l: ((ps - 4, ps - 2) if l in soft else (pst - 2, 2)) for l in set(labels)}
     lam_s = 2 / 3
-    shapes = {l: CellShape(poly, labels.index(l), d[1], lam_s, 1.0, p_slope=d[0])
-              for l, d in degree.items()}
-    # upper bound of f1: the largest wall clamped
-    big = max(soft, key=lambda l: shapes[l].r * min(shapes[l].d))
-    w1 = shapes[big].clamped_omegas(poly, labels.index(big), args.beta, H_REF)[0]
-    omega_max = args.max_ratio * w1
+    counts = {l: labels.count(l) for l in set(labels)}
+    rep = {l: labels.index(l) for l in counts}
+    made = {}
+
+    def make(l, spec):
+        if (l, spec) not in made:
+            made[l, spec] = CellShape(poly, rep[l], spec[2], lam_s, 1.0, p_slope=spec[1],
+                                      bubble=spec[0])
+        return made[l, spec]
+
+    soft_spec = ("both", ps - 2, ps)
+    big = max(soft, key=lambda l: make(l, soft_spec).r * min(make(l, soft_spec).d))
+    w1 = make(big, soft_spec).clamped_omegas(poly, rep[big], args.beta, H_REF)[0]
+    quasi = ("dist", pst, 2)
+    w_ss = {l: make(l, quasi).clamped_omegas(poly, rep[l], 0.0, H_REF)[0]
+            for l in counts if l not in soft}
+    nG = len(mirror_group(poly)[1])
+    ratio = args.max_ratio
+    while True:
+        # upper bound of f1: the largest wall clamped; computed 20 % beyond the export
+        # range, so that a band reaching over ratio x f1 can be completed
+        omega_max = 1.2 * ratio * w1
+        spec = {l: soft_spec if l in soft else
+                ("both", pst, 4) if w_ss[l] < omega_max else quasi for l in counts}
+        per_block = sum(counts[l] * basis_size(spec[l]) for l in counts) / nG
+        if per_block <= args.block_budget or ratio <= 3.0:
+            break
+        ratio -= 0.5
+    shapes = {l: make(l, spec[l]) for l in counts}
     omega, wsq, complete, shapes, chi, nG = analyse_hollow_sym(
-        poly, labels, degree, args.beta, omega_max, args.budget, shapes=shapes)
-    # export: multiplets up to max-ratio x f1 inside the complete range, ending with a band
-    top = min(args.max_ratio * omega[0], complete)
-    groups = [g for g in group_multiplets(omega, 1e-5) if omega[g[-1]] < top * (1 - 1e-6)]
-    groups = groups[:complete_bands([omega[g[0]] for g in groups])]
-    # error indicator from a coarser run of two blocks
-    err_chis = sorted({0, nG - 1})
-    oc, _, _, _, chic, _ = analyse_hollow_sym(poly, labels, coarse, args.beta, 1.3 * omega_max,
-                                              args.budget, characters=err_chis, verbose=False)
+        poly, labels, spec, args.beta, omega_max, args.budget, shapes=shapes)
+    # export: all multiplets up to max-ratio x f1, plus the rest of a band reaching over it
+    # (up to the next gap >= 3 %); if that band is not complete in the computed range (budget),
+    # end at the last gap >= 3 % below instead
+    gs = group_multiplets(omega, 1e-5)
+    fr = np.array([omega[g].mean() for g in gs])
+    lim = min(complete, omega_max)
+    n = int(np.searchsorted(fr, ratio * fr[0]))
+    while 0 < n < len(gs) and (fr[n] - fr[n - 1]) / fr[n - 1] < 0.03 and omega[gs[n][-1]] < lim:
+        n += 1
+    if n == len(gs) or (n > 0 and (fr[n] - fr[n - 1]) / fr[n - 1] < 0.03):
+        big_gaps = np.flatnonzero((fr[1:n] - fr[:n - 1]) / fr[:n - 1] >= 0.03)
+        n = int(big_gaps[-1]) + 1 if len(big_gaps) else n
+    groups = gs[:n]
+    # error indicator: the same two blocks with every degree lowered by 2
+    coarse = {l: (k, a - 2, b - 2 if b > 2 else 2) for l, (k, a, b) in spec.items()}
+    err_chis = sorted({0, nG - 1})[:args.err_blocks]
+    of, _, _, _, chif, _ = analyse_hollow_sym(
+        poly, labels, coarse, args.beta, 1.3 * omega_max, args.budget, characters=err_chis,
+        shapes={l: make(l, coarse[l]) for l in counts}, verbose=False)
     rel = np.full(len(omega), np.nan)
     for s in err_chis:
-        fine_idx = np.flatnonzero(chi == s)
-        cw = oc[chic == s]
-        m = min(len(fine_idx), len(cw))
-        rel[fine_idx[:m]] = np.abs(cw[:m] - omega[fine_idx[:m]]) / omega[fine_idx[:m]]
+        idx = np.flatnonzero(chi == s)
+        fw = of[chif == s]
+        m = min(len(idx), len(fw))
+        rel[idx[:m]] = np.abs(fw[:m] - omega[idx[:m]]) / omega[idx[:m]]
     known = np.flatnonzero(~np.isnan(rel))
     err = []
     for g in groups:
@@ -963,18 +1007,25 @@ def run_dist(poly, args, cell_class_info, labels):
         "freq": [float(omega[g].mean() / (2 * np.pi)) for g in groups],
         "mult": [len(g) for g in groups], "err": err, "mean": mean, "cells": cells,
         "cell_class": cell_class_info[0], "area": area,
-        "degree": {l: d[1] if l in soft else d[0] for l, d in degree.items()},
-        "method": "Ritz per cell, smooth-distance bubble phi = (sum_f d_f^-2)^(-1/2): phi^2 x "
-                  "poly (zero slope at the faces: the interior) + phi x poly (carries the hinge "
-                  "rotations); soft walls: interior degree p, slopes p - 2; stiff walls: slopes "
-                  f"{pst}, interior 2 (polynomial_degree lists p resp. the slope degree). Cell "
-                  "matrices per shape mapped by congruence; problem block-diagonalised by "
-                  f"(Z2)^{int(math.log2(nG))} mirror symmetries (one block per character, "
-                  "assembled from one representative cell per orbit); hinge penalty "
-                  f"beta = {args.beta:g} mu h^3 / l",
+        "degree": {l: (s[2] if l in soft else s[1]) for l, s in spec.items()},
+        "basis": {l: f"{k}: slopes {a}, interior {b}" for l, (k, a, b) in sorted(spec.items())},
+        "range": ratio,
+        "method": "Ritz per cell with two bubbles: phi = (sum_f d_f^-2)^(-1/2), a smooth distance "
+                  "to the face planes, and b = prod_f tanh(d_f/delta); phi^2 x poly (zero slope "
+                  "at the faces: the interior) plus phi x poly and b x poly for the hinge "
+                  "rotations (near an edge they behave like r and r^2, the exact solution like "
+                  "r^(pi/alpha) in between). Soft walls: slopes p - 2, interior p; stiff walls "
+                  f"resonating in the range: slopes {pst}, interior 4; the others: phi x poly "
+                  f"slopes {pst}, interior 2 (see basis; polynomial_degree lists p for soft "
+                  "walls, the slope degree for stiff ones). Legendre-product polynomials, "
+                  "orthonormalised by QR; cell matrices per shape mapped by congruence; problem "
+                  f"block-diagonalised by (Z2)^{int(math.log2(nG))} mirror symmetries (one "
+                  "block per character, assembled from one representative cell per orbit); "
+                  f"hinge penalty beta = {args.beta:g} mu h^3 / l",
         "rel_error": "indicator: change of the modes of two symmetry blocks when every degree "
                      "is lowered by 2 (per multiplet the largest change of its members, else "
-                     "of the nearest mode); Ritz values are upper bounds",
+                     "of the nearest mode); pessimistic: the step from these degrees to 2 "
+                     "higher is several times smaller. Ritz values are upper bounds",
     }
 
 
@@ -1052,6 +1103,9 @@ def write_output(poly, res, out_dir, args):
                               "polynomials, cell matrices per shape mapped by congruence, hinge "
                               f"penalty beta = {args.beta:g} mu h^3 / l"),
             "polynomial_degree": {k: v for k, v in sorted(res["degree"].items())},
+            **({"basis": res["basis"]} if "basis" in res else {}),
+            **({"computed_up_to": f"{res['range']:g} x f1 (plus the band reaching over it)"}
+               if "range" in res else {}),
             "lambda_over_mu": 1.0,
             "units": "circumradius R = 1, density rho = 1, shear modulus mu = 1 (shear wave "
                      f"speed c_s = 1); wall thickness h_ref = {H_REF} R",
@@ -1104,6 +1158,10 @@ def main():
                     help="interior degree of the soft (large) walls; their slopes: 2 less")
     ap.add_argument("--stiff-degree", type=int, default=6,
                     help="slope degree of the stiff (small) walls; their interior: 2")
+    ap.add_argument("--block-budget", type=int, default=20000,
+                    help="largest symmetry block (unknowns); above it the range is lowered")
+    ap.add_argument("--err-blocks", type=int, default=2,
+                    help="symmetry blocks recomputed with degrees + 2 for the error indicator")
     ap.add_argument("--beta", type=float, default=1e3, help="hinge penalty factor")
     ap.add_argument("--isolated", action="store_true",
                     help="isolated largest walls (prahi, prix, gidpixhi): one wall + neighbours "
