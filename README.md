@@ -11,6 +11,10 @@ boundary topology) for the Tesserian Unity project. Two stages:
 2. **Topology** (`dotnet run -- topology` / `make topology`): 4D gift-wrapping convex hull
    (`TrueConvexHull4D.cs`) computes cells, faces, edges, outward normals, cell→face
    incidence. Output: `topology_output/<name>.json`.
+3. **Modal analysis** (`make modal`): vibration modes of every polychoron as a solid
+   elastic 4D body (`modal_analysis.py`), plus example sounds (`make sounds`,
+   `synth_modal.py`). Output: `modal_output/<name>.json`, `modal_output/sounds/*.wav`.
+   See [Modal analysis](#modal-analysis-4d-vibration-modes).
 
 The finished `topology_output/*.json` files are copied into the Unity repo at
 `tesserian/Assets/_Tesserian/RotatingPolychoron/Resources/polychora/` (the Polychoron Watch
@@ -107,3 +111,118 @@ dev Complex mode which renders nonconvex figures with real occlusion):
 
 Next steps if desired: multi-excavations with pairwise-disjoint pyramids, tunnel/toroid
 constructions (boundary topology beyond the 3-sphere), and general boolean CSG.
+
+## Modal analysis (4D vibration modes)
+
+`python modal_analysis.py` (or `make modal`, which runs `--selftest` first) computes the free
+vibrations of every polychoron in `topology_output/`, treated as a **solid, homogeneous,
+isotropic, linear-elastic 4D body** that is unsupported in R^4. Displacements u(x,t) ∈ R^4
+obey the 4D Navier–Cauchy equations
+
+    rho u_tt = (lambda + mu) grad(div u) + mu Laplace(u)    inside the polytope,
+    sigma(u) n = 0                                          on its 3D boundary (the cells),
+
+with sigma = lambda tr(eps) I + 2 mu eps. Default material: lambda = mu (the Cauchy solid,
+`--lame-ratio`). Units: edge length a = 1, density 1, shear modulus 1, so the shear wave
+speed is c_s = 1 and all frequencies are dimensionless: **f_Hz = frequency · c_s / a**.
+The 10 rigid-body modes of a free 4D body (4 translations + 6 rotation planes) are removed.
+
+**Method.** Rayleigh–Ritz with a complete polynomial basis — every displacement component
+is a polynomial of total degree ≤ 12 in (x, y, z, w), 4 × 1820 basis fields; this is the 4D
+version of Visscher's "xyz algorithm" from resonant ultrasound spectroscopy. No mesh: mass
+and stiffness entries are integrals of monomials over the polytope, computed exactly with
+Lasserre's divergence-theorem recursion vertex → edge → face → cell → polytope
+((k+q)∫_G f = Σ_H dist(x0,H) ∫_H f + ∫_G x0·∇f for f homogeneous of degree q). Coordinate
+reflections and central inversion of the polytope split the eigenproblem into parity
+blocks. Two numerical details matter: every monomial is normalised before the Löwdin
+orthogonalisation (degree 12 on the thin 5-cell has Gram condition ~1e17 raw, ~3e13
+scaled), and no basis direction may be dropped — dropping breaks the symmetry of the Ritz
+space and splits degenerate multiplets.
+
+**Validation** (`python modal_analysis.py --selftest`): polytope moments agree with exact
+values (tesseract) and an independent cone quadrature (5-cell, 24-cell) to 1e-15; 4-volumes
+match the literature (120-cell 787.857, 600-cell 26.4754, …). The solver reproduces the
+analytic free-vibration frequencies of the unit 3-ball and 4-ball (torsional modes from
+(l−1) J_ν(z) = z J_{ν+1}(z), ν = (n−2+2l)/2, and the radial breathing mode) to 1e-9…1e-15
+(6e-6 for the higher l = 1 twist mode at degree 10), including the 4D multiplicities
+2l(l+2) = 6, 16, 30. The lowest 4-ball mode is the 16-fold torsional l = 2 mode at
+ωR/c_s = 2.6886.
+
+**Accuracy.** Polytope edges are weak singularities of the elastic field, so convergence in
+the degree is algebraic rather than exponential: the lowest multiplets are typically
+accurate to 0.1–0.3 %. Each multiplet carries `rel_error` = relative change from degree 10
+to 12; export stops at the first multiplet where this exceeds 1 % (`--max-error`).
+Symmetry-degenerate modes agree to ~1e-9. Distinct multiplets closer than 1e-5 (relative)
+are merged into one: such near-degeneracies occur (3.7e-6 between a 9- and a 6-fold
+multiplet of prico), are inaudible, and their numerical eigenvectors mix, so only the
+merged sums are exactly symmetric. Gains of symmetry-equivalent vertices and cells agree
+to ≤ 1e-6.
+
+### Output format `modal_output/<name>.json`
+
+| field | meaning |
+|---|---|
+| `modes.frequency[g]` | dimensionless frequency of multiplet g (ascending); f_Hz = frequency · c_s/a |
+| `modes.multiplicity[g]` | number of degenerate modes in the multiplet (symmetry) |
+| `modes.rel_error[g]` | estimated relative frequency error |
+| `gains.mean.normal[g]`, `.tangential[g]` | excitation of multiplet g by a hit at a uniformly random boundary point — the typical hit |
+| `gains.cells[s]` | same, averaged over one cell of class s (`label` e.g. `truncated octahedron`, `cube #2`; `count` cells) |
+| `gains.vertex` | same, for a hit exactly at a vertex (all vertices of a uniform polychoron are equivalent) |
+| `cell_class[c]` | class s of cell c of `topology_output/<name>.json` (same indices) |
+| `model`, `geometry` | physics, units, degree, volume, circumradius, detected symmetries |
+
+A gain is mass · Σ_{k∈g} (u_k(p) · d)² for mass-normalised mode shapes u_k (∫ρ|u|² = 1): the
+excitation of the multiplet by a unit impulse along d at p, picked up along d, relative to
+the rigid-body value 1/mass (dimensionless, typically 0.01–10). `normal` uses d = outward
+cell normal (vertex: normalised sum of the incident cell normals), `tangential` averages
+over the 3 tangent directions. Summing over the multiplet makes a gain independent of the
+arbitrary basis inside a degenerate eigenspace, hence identical for all symmetry-equivalent
+cells — one table per cell class. Cell classes are orbits, not shapes: sidpith has two
+classes of cubes (24 + 8).
+
+Why averages and not point values: at symmetric points (vertex, edge midpoint, face or
+cell centre) many multiplets vanish by symmetry, so they are atypical hit points, and the
+gain field of a multiplet peaks strongly at the cell's corners (up to ~150× its cell
+average on the 5-cell). Interpolating point values therefore misses the spectrum of a
+random hit by ~100 %; the cell averages are computed exactly (per-cell monomial moments
+as quadratic forms, cross-checked against a degree-25 quadrature to 1e-11). The lowest
+multiplet is typically a shear/torsion mode whose boundary motion is almost purely
+tangential: a perpendicular hit barely excites it, a glancing hit does.
+
+**Synthesis recipe (game).** A hit with impulse J (normal component J_n, tangential J_t) on
+cell c rings as a bank of damped oscillators, one per multiplet (s = `cell_class[c]`):
+
+    y(t) = Σ_g A_g exp(-t / tau_g) cos(2π f_g t)
+    f_g   = scale · frequency[g]                     (scale = c_s / a in Hz)
+    A_g   = (J_n² cells[s].normal[g] + J_t² cells[s].tangential[g]) / mass · M(f_g)
+    tau_g = 1 / (π · loss · f_g)                      (material loss factor)
+
+M(f) is the spectrum of the contact force (mallet hardness; a half sine of contact time T
+has |M(f)| = |cos(π f T)| / |1 − (2 f T)²|). Each oscillator is one two-pole resonator per
+sample (a1 = 2 r cos(2π f/sr), a2 = −r², r = exp(−π · loss · f / sr)); hits add linearly.
+For hits close to a vertex, blend towards `gains.vertex`; where only one sound per
+polychoron is wanted, use `gains.mean`. If sound radiation is modelled separately, √gain
+is the pure excitation amplitude.
+
+### Example sounds
+
+`python synth_modal.py` (or `make sounds`) renders one typical hit per polychoron to
+`modal_output/sounds/<name>.wav` and all of them, highest to lowest, to `_tour.wav`
+(legend with start times in `_tour.txt`). `--scale` (default 3000 Hz) is the common
+scaling, f_Hz = scale · frequency · L, and `--size` decides what the polychora share:
+
+| `--size` | L | scale means | fundamentals at 3000 Hz |
+|---|---|---|---|
+| `edge` (default, as in `topology_output`) | 1 | c_s / a (steel: a ≈ 1 m) | 101 Hz (gidpixhi) … 2.27 kHz (pen), ×22 |
+| `radius` | R / a | c_s / R | within ×1.33 (≈ 5 semitones) |
+| `volume` | (V / a⁴)^¼ | c_s / V^¼ | within ×2.2 |
+
+So pitch is essentially set by size: at equal edge length the circumradius ranges from
+0.63 a (pentachoron) to 12.8 a (gidpixhi); f scales as 1/size ∝ V^(−1/4), and the shape
+only contributes a factor between 0.46 (pentachoron: pointy, hence "soft") and 1.0 (the
+round H4 polychora ring within 0.5 % of a 4-ball of the same volume, with the same
+multiplet sequence 16, 9, 4, 30, …). Output for `--size radius|volume` goes to
+`modal_output/sounds_<size>/`. Other options: `--site mean|cell|vertex|all` (`all`: typical
+hit, each cell class, vertex in sequence), `--direction normal|tangential`, `--loss`,
+`--contact-ms` (default: mallet adapted to the exported band so its truncation is
+inaudible), `--pickup displacement|velocity|acceleration`, `--duration`, `--tour-seconds`.

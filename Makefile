@@ -8,7 +8,9 @@
 #   make topology/pen     # (re)compute topology for one polytope
 #   make rebuild-topology # delete all topology files and regenerate
 #   make check            # Euler-characteristic check on all topology files
-#   make clean            # remove topology_output/ and build artefacts
+#   make modal            # 4D modal analysis of all polychora -> modal_output/
+#   make sounds           # example sounds from modal_output/ -> modal_output/sounds/
+#   make clean            # remove topology_output/ and build artifacts
 # ============================================================
 
 DOTNET       := dotnet
@@ -22,7 +24,7 @@ TOPO_JSONS   := $(patsubst $(VDIR)/%.json, $(TDIR)/%.json, $(VERTEX_JSONS))
 NAMES        := $(patsubst $(VDIR)/%.json, %, $(VERTEX_JSONS))
 
 # ── phony targets ────────────────────────────────────────────
-.PHONY: all vertices topology rebuild-topology check clean \
+.PHONY: all vertices topology rebuild-topology check modal sounds clean \
         $(addprefix topology/, $(NAMES))
 
 # ── default ──────────────────────────────────────────────────
@@ -77,6 +79,14 @@ rebuild-topology: | $(TDIR)
 # ── integrity / Euler check ──────────────────────────────────
 check:
 	@python check_topology.py $(TDIR)
+
+# ── modal analysis & example sounds ──────────────────────────
+modal:
+	python modal_analysis.py --selftest
+	python modal_analysis.py
+
+sounds:
+	python synth_modal.py
 
 # ── clean ─────────────────────────────────────────────────────
 clean:
