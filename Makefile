@@ -10,6 +10,8 @@
 #   make check            # Euler-characteristic check on all topology files
 #   make modal            # 4D modal analysis of all polychora -> modal_output/
 #   make sounds           # example sounds from modal_output/ -> modal_output/sounds/
+#   make hollow           # thin-walled (hollow) modal analysis -> modal_hollow_output/
+#   make hollow-sounds    # example sounds -> modal_hollow_output/sounds/
 #   make clean            # remove topology_output/ and build artifacts
 # ============================================================
 
@@ -24,7 +26,7 @@ TOPO_JSONS   := $(patsubst $(VDIR)/%.json, $(TDIR)/%.json, $(VERTEX_JSONS))
 NAMES        := $(patsubst $(VDIR)/%.json, %, $(VERTEX_JSONS))
 
 # ── phony targets ────────────────────────────────────────────
-.PHONY: all vertices topology rebuild-topology check modal sounds clean \
+.PHONY: all vertices topology rebuild-topology check modal sounds hollow hollow-sounds clean \
         $(addprefix topology/, $(NAMES))
 
 # ── default ──────────────────────────────────────────────────
@@ -87,6 +89,13 @@ modal:
 
 sounds:
 	python synth_modal.py
+
+# hollow bodies reuse the cell classes (symmetry orbits) of modal_output/
+hollow:
+	python modal_hollow.py
+
+hollow-sounds:
+	python synth_modal.py --modal-dir modal_hollow_output --out-dir modal_hollow_output/sounds
 
 # ── clean ─────────────────────────────────────────────────────
 clean:

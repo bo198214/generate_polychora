@@ -15,6 +15,9 @@ boundary topology) for the Tesserian Unity project. Two stages:
    elastic 4D body (`modal_analysis.py`), plus example sounds (`make sounds`,
    `synth_modal.py`). Output: `modal_output/<name>.json`, `modal_output/sounds/*.wav`.
    See [Modal analysis](#modal-analysis-4d-vibration-modes).
+4. **Hollow bodies** (`make hollow`): the same for thin-walled hollow polychora
+   (`modal_hollow.py`, uses the cell classes from step 3). Output:
+   `modal_hollow_output/<name>.json`. See [Hollow bodies](#hollow-bodies-thin-walled).
 
 The finished `topology_output/*.json` files are copied into the Unity repo at
 `tesserian/Assets/_Tesserian/RotatingPolychoron/Resources/polychora/` (the Polychoron Watch
@@ -251,3 +254,62 @@ between 0.46 (pentachoron: pointy, fills 3 % of its circumscribed ball, hence "s
 prahi, gidpixhi, …) ring within 0.5 % of that ball and share its partials (1 : 1.45 : 1.82 :
 2.17 : 2.50 for multiplets 9, 16, 25, 36, …), so as solids they are practically
 indistinguishable; the angular ones have their own partial patterns.
+
+## Hollow bodies (thin-walled)
+
+`python modal_hollow.py` (or `make hollow`) computes the same kind of modal data for the
+polychora as **thin-walled hollow 4D bodies** → `modal_hollow_output/<name>.json`, same
+format as `modal_output` (differences below). As solids, polychora of equal circumradius
+sound alike; as hollow bodies they sound like their walls, whose pitch is set by the cell
+shapes and sizes — the lowest frequencies of the 47 spread over about ×15 instead of ×1.33,
+and e.g. the 120-cell and the 600-cell, indistinguishable as solids, are ~1.5 octaves apart.
+
+**Model.** Every cell is a flat 3D wall ("hyperplate") of thickness h that bends in the 4th
+direction, along its normal (Kirchhoff: (h³/12) ∫ [λ*(Δw)² + 2μ|∇∇w|²], λ* = 2λμ/(λ+2μ),
+plane stress σ_nn = 0). Thin-wall limit: a ridge (polygon shared by two cells) cannot move,
+because any motion in its 2D normal plane stretches at least one wall in-plane, which is
+infinitely stiffer than bending as h → 0; so each wall's deflection vanishes on its faces.
+Neighbouring walls are welded: the hinge rotation across a ridge (the slope, taken in the
+ridge's normal plane with the orientation sign det[[n_A·n_B, n_A·m_B], [m_A·n_B, m_A·m_B]])
+is continuous, imposed by a penalty β = 10³ μh³/ℓ. Same material and units as the solids,
+reference thickness h_ref = 0.06 R; the bending spectrum is exactly linear in h:
+**f_Hz = frequency · (h/h_ref) · c_s/R**.
+
+**Method.** Per cell, w = b(s)·poly(s) with a "flat-top" bubble b = Π_faces tanh(dist_f/δ),
+δ = inradius/2: it vanishes linearly on every face like the polynomial bubble Π dist_f (its
+δ → ∞ limit), but stays ≈ 1 inside even for the 62-face cells, where the polynomial bubble
+collapses to a narrow peak; the p → ∞ limit does not depend on δ. Cell matrices are built
+once per cell shape (Gauss quadrature on the flag tetrahedra) and carried to every
+congruent cell by an orthogonal map found from the vertex sets. Degrees are chosen per
+polychoron within a budget of 14 000 unknowns (26 000 for the largest): the soft (large)
+walls get degree 4–6, much stiffer small walls 1–2 (in the audible band they only transmit
+rotations). Modes are exported up to 3 × the lowest frequency, at least 6 per soft wall (≤ 800).
+
+**Validation and accuracy.** A single simply supported cube wall reproduces the analytic
+f = 3π² h √((λ*+2μ)/12) / (2π) to 5 digits (and its (1,1,2) multiplet at exactly 2×);
+frequencies scale exactly with h; all multiplets follow the symmetry groups; on the
+tesseract, degree 9 with δ = r/3, r, 3r gives the same f1 = 0.1674 and multiplets, in
+agreement with an independent polynomial-bubble prototype. A first approach with free
+polynomial displacement fields per cell and displacement penalties locked (frequencies
+independent of h) — the fixed-ridge basis avoids that. Walls with obtuse inner dihedral
+angles (dodecahedron 117°, Archimedean cells up to ~160°) have weak edge singularities, so
+convergence in the degree is algebraic: first bands are accurate to ~1 % for cube and
+tetrahedron walls and ~5–10 % (too high; Ritz values are upper bounds) for dodecahedral and
+many-faced walls. `rel_error` is an indicator per multiplet (the clamped single wall of the
+dominant cell shapes, degree p vs p + 2), pessimistic for higher modes.
+
+**Differences to `modal_output`.** No `gains.vertex` (vertices lie on the fixed ridges),
+`tangential` = 0 (in-plane membrane motion is not modelled; its modes are far higher),
+`gains.mean` = multiplicity (every mode bends all the mass, so a random hit excites each
+mode equally on average), and `gains.cells` depend strongly on the hit wall: a hit excites
+mainly the bands of its own wall shape, a small stiff wall barely excites the low bands.
+`cell_class` is the same as in `modal_output`.
+
+**Character and limits.** A hollow polychoron's spectrum consists of bands: one mode per
+soft wall and wall mode, split by the coupling through the welds. Where the largest walls
+do not touch each other (gidpixhi, prahi, …) the coupling runs only through stiff small walls
+and a band of 120 modes is narrower than 0.1 % — the body sounds like a single wall
+(`synth_modal.py --detune` makes such clusters shimmer). Only the lowest bands are computed,
+so the high "ping" of a small stiff wall hit directly is missing. Example sounds:
+`make hollow-sounds` (`synth_modal.py --modal-dir modal_hollow_output --out-dir
+modal_hollow_output/sounds`; `--scale` = c_s/R for the reference thickness).

@@ -52,15 +52,17 @@ from scipy.signal import fftconvolve
 def strikes(doc, site):
     """(label, gains) of the hits to render: mean = uniformly random point on the boundary."""
     g = doc["gains"]
+    vertex = [("vertex", g["vertex"])] if "vertex" in g else []    # hollow models: none
     if site == "mean":
         return [("typical hit", g["mean"])]
     if site == "vertex":
-        return [("vertex", g["vertex"])]
+        if not vertex:
+            sys.exit(f"{doc['name']}: no vertex gains in this model")
+        return vertex
     if site == "cell":
         s = max(g["cells"], key=lambda s: s["count"])
         return [(s["label"], s)]
-    return ([("typical hit", g["mean"])] + [(s["label"], s) for s in g["cells"]]
-            + [("vertex", g["vertex"])])
+    return [("typical hit", g["mean"])] + [(s["label"], s) for s in g["cells"]] + vertex
 
 
 def frequencies_hz(doc, scale):
