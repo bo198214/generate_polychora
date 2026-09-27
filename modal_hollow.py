@@ -23,31 +23,30 @@ the hinge rotation across a ridge (the slope, taken in the ridge's normal plane 
 orientation sign of n_A^m_A versus n_B^m_B) is continuous, imposed by a stiff penalty.
 The bending spectrum is then exactly linear in h: frequency(h) = frequency * h / h_ref.
 
-Discretisation
---------------
-Per cell, w = b(s) * poly(s) with poly of total degree <= p in local 3D coordinates and a
-"flat-top" bubble b = prod_faces tanh(dist_f / delta) (delta = 3, 1 or 0.5 x inradius for
-cells with <= 8, <= 12 or more faces): it vanishes
-linearly on every face like the polynomial bubble prod dist_f (its delta -> infinity limit),
-but stays ~1 inside even for cells with 62 faces. The limit p -> infinity does not depend on
-delta. Cell matrices are computed once per cell shape (flag-tetrahedra Gauss quadrature) and
-carried to every congruent cell by an orthogonal map found from the vertex sets; cells whose
-walls are much stiffer than the softest ones get a lower degree (they only transmit rotations
-in the audible band). Error indicator per mode: change of the dominant cell shapes'
-clamped single-wall frequencies from degree p to p + 2.
+Discretisation (run_dist)
+-------------------------
+Per cell, polynomials (Legendre products, total degree <= p, local 3D coordinates) times
+bubbles that vanish on every face (CellShape): phi^2 * poly with phi = (sum_f d_f^-2)^(-1/2)
+(zero value and slope: the interior) plus phi * poly and b * poly, b = prod_f tanh(d_f/delta),
+for the hinge rotations at the welds. Cell matrices once per shape (symmetric Gauss rule on
+the flag tetrahedra, basis orthonormalised by QR), carried to every congruent cell by an
+orthogonal map found from the vertex sets. Large (soft) walls: slopes 6, interior 8; small
+walls: slopes 6, interior 4 if they resonate in the computed range, else phi slopes only and
+interior 2. The problem is block-diagonalised by the commuting mirror symmetries (Z2)^k
+(analyse_hollow_sym); blocks related by a mirror permutation are computed once. Modes up to
+5 x f1 (plus the band reaching over it). Error indicator: change of two symmetry blocks with
+every degree lowered by 2 (pessimistic).
 
-Isolated walls: if the largest walls share no ridge and every neighbour wall is stiff (its
-lowest simply supported mode >= --isolated-min x f1), each band is one mode of a single large
-wall on all of them. Then one large wall welded to all its neighbours is computed with the
-smooth-distance basis (CellShape bubble "dist": phi^2 * poly + phi * poly, fast convergence
-also for clamped or stiffly welded walls), outer ridges clamped (= band mean); see
-run_isolated.
+Also: --isolated (one large wall + its neighbours, band means only, for prahi, prix,
+gidpixhi; run_isolated) and --bubble tanh (the first version: flat-top bubble only, no
+symmetry reduction, too high by up to 33 % for walls with many faces; run_tanh).
 
 Units: circumradius R = 1, rho = 1, mu = 1, lambda = mu (as modal_output), reference wall
 thickness h_ref = 0.06 R. f_Hz = frequency * (h / h_ref) * c_s / R.
 """
 import argparse
 import glob
+import itertools
 import json
 import math
 import os
@@ -134,6 +133,33 @@ def mirror_group(poly, tol=1e-6):
                 g = g @ gens[j]
         elements.append(g)
     return gens, elements
+
+
+def mirror_permutations(poly, gens, tol=1e-6):
+    """Symmetries g that permute the mirror generators by conjugation, g R_i g^-1 = R_pi(i)
+    (the central inversion, if a generator, stays): list of (pi, g). They map the block of
+    character chi onto the block of chi o pi^-1, which then has the same spectrum."""
+    X = poly.xi
+    tree = cKDTree(X)
+    cellset = {frozenset(c.tolist()) for c in poly.cells}
+    mir = [j for j, g in enumerate(gens) if abs(np.trace(g) - 2) < 1e-9]
+    normals = {j: np.linalg.eigh(gens[j])[1][:, 0] for j in mir}   # eigenvalue -1 first
+    out = []
+    for perm in itertools.permutations(mir):
+        pi = {j: j for j in range(len(gens))}
+        pi.update(dict(zip(mir, perm)))
+        for signs in itertools.product([1.0, -1.0], repeat=len(mir)):
+            g = sum(s * np.outer(normals[pi[j]], normals[j]) for j, s in zip(mir, signs))
+            if len(mir) < 4:                            # complete the map on the rest
+                Nm = np.array([normals[j] for j in mir])
+                rest = sla.null_space(Nm)
+                g = g + rest @ rest.T
+            dist, pm = tree.query(X @ g.T)
+            if dist.max() < tol and all(frozenset(pm[c].tolist()) in cellset for c in poly.cells):
+                u, _, vt = np.linalg.svd(X.T @ X[pm])
+                out.append((pi, (u @ vt).T))
+                break
+    return out
 
 
 def face_slopes(poly, f, cells, shapes, cell_labels, frames, Qs, U, W):
@@ -549,7 +575,7 @@ def analyse_hollow(poly, cell_labels, degree, beta, n_modes, lam=1.0, mu=1.0, bu
 
 
 def analyse_hollow_sym(poly, cell_labels, degree, beta, omega_max, max_modes, lam=1.0, mu=1.0,
-                       characters=None, shapes=None, verbose=True):
+                       characters=None, shapes=None, density=0.0, verbose=True):
     """Welded hollow polychoron, block-diagonalised by the commuting symmetries (Z2)^k of
     mirror_group: one real block per character chi, spanned by chi-symmetric combinations
     over each cell orbit. A block is assembled from the rows of one representative cell per
@@ -647,10 +673,27 @@ def analyse_hollow_sym(poly, cell_labels, degree, beta, omega_max, max_modes, la
             rows[r][other] = rows[r].get(other, 0) + kr * gs.T @ (Wq[:, None] * go)
     t1 = time.time()
 
-    # characters of (Z2)^k: chi_s(element m) = (-1)^popcount(s & m)
-    chis = list(range(nG)) if characters is None else characters
-    om_all, wsq_orb, chi_of, complete = [], [], [], np.inf
+    # characters of (Z2)^k: chi_s(element m) = (-1)^popcount(s & m). A symmetry permuting
+    # the mirrors maps block s onto block pi(s) with the same spectrum: one block per orbit
+    copies = {}
+    if characters is None:
+        chis, seen = [], set()
+        perms = mirror_permutations(poly, gens)
+        for s in range(nG):
+            if s in seen:
+                continue
+            chis.append(s); seen.add(s); copies[s] = []
+            for pi, g in perms:
+                s2 = sum(1 << pi[j] for j in range(len(gens)) if s >> j & 1)
+                if s2 not in seen:
+                    seen.add(s2)
+                    copies[s].append((s2, tree.query(ctr @ g.T)[1]))
+    else:
+        chis = characters
+    om_all, wsq_all, chi_of, complete = [], [], [], np.inf
     N_total = sum(size[r] * shapes[cell_labels[r]].size for r in reps)
+    # modes per unknown: the caller's estimate, then the largest seen in a block
+    cell_orbit = [reps.index(rep_of[c]) for c in range(C)]
     for s in chis:
         chi = np.array([(-1) ** bin(s & m).count("1") for m in range(nG)], dtype=float)
         V = {}
@@ -692,7 +735,7 @@ def analyse_hollow_sym(poly, cell_labels, degree, beta, omega_max, max_modes, la
             lu = spla.splu(Kt, permc_spec="MMD_AT_PLUS_A", diag_pivot_thresh=0.0,
                            options=dict(SymmetricMode=True))
             OPinv = spla.LinearOperator((N, N), matvec=lu.solve, dtype=float)
-            k = min(max(40, int(0.3 * cap)), N - 2)
+            k = min(max(40, int(1.2 * density * N) + 20 if density else int(0.3 * cap)), cap, N - 2)
             while True:
                 w, X = spla.eigsh(Kt, k=k, sigma=0.0, which="LM", OPinv=OPinv)
                 o_ = np.argsort(w); w, X = w[o_], X[:, o_]
@@ -705,20 +748,26 @@ def analyse_hollow_sym(poly, cell_labels, degree, beta, omega_max, max_modes, la
             else:
                 complete = min(complete, math.sqrt(w[-1]))
             del lu
+        density = max(density, len(w) / N)
         Y = X * dinv[:, None]                           # M-normalised coefficients
         wo = np.empty((len(reps), len(w)))
         for k_, r in enumerate(reps):
             y = Y[offs[k_]:offs[k_ + 1]]
             wo[k_] = shapes[cell_labels[r]].r ** 3 * np.einsum("ak,ak->k", y, y) / size[r]
-        om_all.append(np.sqrt(np.maximum(w, 0))); wsq_orb.append(wo); chi_of.append(np.full(len(w), s))
+        om = np.sqrt(np.maximum(w, 0))
+        wcell = wo[cell_orbit]                          # orbit value for every cell
+        om_all.append(om); wsq_all.append(wcell); chi_of.append(np.full(len(w), s))
+        for s2, pg in copies.get(s, []):                # same spectrum, cells permuted
+            w2 = np.empty_like(wcell)
+            w2[pg] = wcell
+            om_all.append(om); wsq_all.append(w2); chi_of.append(np.full(len(w), s2))
         if verbose:
-            print(f"      block {s:2d}/{nG}: {N:6d} unknowns, {len(w):5d} modes  [{time.time() - t0:.0f}s]",
-                  flush=True)
+            print(f"      block {s:2d}/{nG} (x{1 + len(copies.get(s, []))}): {N:6d} unknowns, "
+                  f"{len(w):5d} modes  [{time.time() - t0:.0f}s]", flush=True)
     omega = np.concatenate(om_all)
     o_ = np.argsort(omega, kind="stable")
     omega = omega[o_]
-    wsq = np.concatenate(wsq_orb, axis=1)[:, o_]
-    wsq = wsq[[reps.index(rep_of[c]) for c in range(C)]]  # orbit value for every cell
+    wsq = np.concatenate(wsq_all, axis=1)[:, o_]
     t2 = time.time()
     if verbose:
         print(f"  {poly.name:9s} cells={C:5d} group (Z2)^{len(gens)}, {len(reps)} orbits, "
@@ -968,18 +1017,31 @@ def run_dist(poly, args, cell_class_info, labels):
             break
         ratio -= 0.5
     shapes = {l: make(l, spec[l]) for l in counts}
+    # expected modes below omega_max: per wall, between its simply supported and clamped count
+    n_exp = 0.0
+    for l, sh in shapes.items():
+        w_ss = np.sqrt(np.maximum(np.linalg.eigvalsh(sh.kb), 0) * H_REF ** 2 / 12 / sh.r ** 4)
+        w_cl = sh.clamped_omegas(poly, rep[l], args.beta, H_REF)
+        n_exp += counts[l] * math.sqrt((w_ss < omega_max).sum() * max((w_cl < omega_max).sum(), 1))
+    density = n_exp / sum(counts[l] * shapes[l].size for l in counts)
     omega, wsq, complete, shapes, chi, nG = analyse_hollow_sym(
-        poly, labels, spec, args.beta, omega_max, args.budget, shapes=shapes)
+        poly, labels, spec, args.beta, omega_max, args.budget, shapes=shapes, density=density)
     # export: all multiplets up to max-ratio x f1, plus the rest of a band reaching over it
     # (up to the next gap >= 3 %); if that band is not complete in the computed range (budget),
     # end at the last gap >= 3 % below instead
     gs = group_multiplets(omega, 1e-5)
     fr = np.array([omega[g].mean() for g in gs])
     lim = min(complete, omega_max)
-    n = int(np.searchsorted(fr, ratio * fr[0]))
-    while 0 < n < len(gs) and (fr[n] - fr[n - 1]) / fr[n - 1] < 0.03 and omega[gs[n][-1]] < lim:
-        n += 1
-    if n == len(gs) or (n > 0 and (fr[n] - fr[n - 1]) / fr[n - 1] < 0.03):
+    top = ratio * fr[0]
+    if lim >= 1.1 * top:
+        # all computed up to 1.1 x top: every multiplet up to top, then the rest of a band
+        # reaching over it, up to the next gap >= 3 % (a dense spectrum: at most 1.1 x top)
+        n = int(np.searchsorted(fr, top))
+        while 0 < n < len(gs) and fr[n] <= 1.1 * top and (fr[n] - fr[n - 1]) / fr[n - 1] < 0.03:
+            n += 1
+    else:
+        # the computed range ends early (mode budget): end at the last gap >= 3 % below it
+        n = int(np.searchsorted(fr, lim * (1 - 1e-9)))
         big_gaps = np.flatnonzero((fr[1:n] - fr[:n - 1]) / fr[:n - 1] >= 0.03)
         n = int(big_gaps[-1]) + 1 if len(big_gaps) else n
     groups = gs[:n]
@@ -1152,16 +1214,17 @@ def main():
                     help="solid-body results: their cell classes (symmetry orbits) are reused")
     ap.add_argument("--max-ratio", type=float, default=5.0,
                     help="export multiplets up to this multiple of the lowest frequency")
-    ap.add_argument("--budget", type=int, default=12000,
+    ap.add_argument("--budget", type=int, default=20000,
                     help="at most about this many modes per polychoron (fewer: lower range)")
     ap.add_argument("--soft-degree", type=int, default=8,
                     help="interior degree of the soft (large) walls; their slopes: 2 less")
     ap.add_argument("--stiff-degree", type=int, default=6,
-                    help="slope degree of the stiff (small) walls; their interior: 2")
-    ap.add_argument("--block-budget", type=int, default=20000,
+                    help="slope degree of the stiff (small) walls; interior 4 if they resonate in the "
+                         "range, else 2")
+    ap.add_argument("--block-budget", type=int, default=32000,
                     help="largest symmetry block (unknowns); above it the range is lowered")
     ap.add_argument("--err-blocks", type=int, default=2,
-                    help="symmetry blocks recomputed with degrees + 2 for the error indicator")
+                    help="symmetry blocks recomputed with degrees - 2 for the error indicator")
     ap.add_argument("--beta", type=float, default=1e3, help="hinge penalty factor")
     ap.add_argument("--isolated", action="store_true",
                     help="isolated largest walls (prahi, prix, gidpixhi): one wall + neighbours "
@@ -1173,7 +1236,8 @@ def main():
                     help="polynomial degree of the isolated-wall model ...")
     ap.add_argument("--neighbour-degree", type=int, default=8, help="... and of its neighbours")
     ap.add_argument("--bubble", choices=["dist", "tanh"], default="dist",
-                    help="tanh: the first version (reproduce it with --bubble tanh --max-ratio 3)")
+                    help="dist: the current model (README); tanh: the first version (reproduce it "
+                         "with --bubble tanh --max-ratio 3)")
     ap.add_argument("--modes", type=int, default=400,
                     help="tanh: modes to compute, at least 6 per wall of the most frequent shape ...")
     ap.add_argument("--max-modes", type=int, default=800, help="tanh: ... up to this many")
@@ -1189,18 +1253,34 @@ def main():
         paths = [os.path.join("topology_output", n + ".json") for n in args.names]
     print(f"hollow modal analysis: h_ref = {H_REF} R, {args.bubble} basis, up to "
           f"{args.max_ratio:g} f1, {len(paths)} polychora -> {args.out}/", flush=True)
+    def n_cells(p):
+        with open(p, encoding="utf-8-sig") as f:
+            return len(json.load(f)["cells"])
+    paths.sort(key=n_cells)                             # small ones first
+    failed = []
     for p in paths:
-        poly = Polytope(p)
-        with open(os.path.join(args.solid, poly.name + ".json"), encoding="utf-8") as f:
-            solid = json.load(f)
-        info = (solid["cell_class"], [c["label"] for c in solid["gains"]["cells"]])
-        res = run(poly, args, info)
-        write_output(poly, res, args.out, args)
+        t0 = time.time()
+        try:
+            poly = Polytope(p)
+            with open(os.path.join(args.solid, poly.name + ".json"), encoding="utf-8") as f:
+                solid = json.load(f)
+            info = (solid["cell_class"], [c["label"] for c in solid["gains"]["cells"]])
+            res = run(poly, args, info)
+            write_output(poly, res, args.out, args)
+        except Exception as e:                          # keep going with the others
+            import traceback
+            traceback.print_exc()
+            failed.append(os.path.basename(p))
+            print(f"  FAILED {p}: {e}", flush=True)
+            continue
         f = np.array(res["freq"])
         print(f"      {sum(res['mult'])} modes / {len(f)} multiplets up to {f[-1] / f[0]:.2f} f1, "
               f"max rel. error {max(res['err']):.1%} (first multiplet {res['err'][0]:.1%})  "
-              + " ".join(f"{x / f[0]:.3f}x{m}" for x, m in list(zip(f, res["mult"]))[:6]),
-              flush=True)
+              + " ".join(f"{x / f[0]:.3f}x{m}" for x, m in list(zip(f, res["mult"]))[:6])
+              + f"  [{(time.time() - t0) / 60:.1f} min]", flush=True)
+    if failed:
+        print("failed:", " ".join(failed))
+        sys.exit(1)
 
 
 if __name__ == "__main__":
